@@ -118,7 +118,7 @@ export default function BillView({ toast }) {
             onClick={async () => {
               try {
                 const result = await shareBillAsImage(bill, 'habib-bill-' + bill.sr_no + '.png')
-                if (result.downloaded) toast('Bill image downloaded. Attach the PNG in WhatsApp; no bill text was sent.')
+                if (result.downloaded) toast('80mm bill image downloaded. Attach the PNG in WhatsApp.')
               } catch (e) {
                 toast(e.message, true)
               }
@@ -138,6 +138,12 @@ export default function BillView({ toast }) {
 
       <div className="card" id="printArea">
         <div style={{ textAlign: 'center', borderBottom: '2px solid var(--text-orange)', paddingBottom: 12, marginBottom: 16 }}>
+          <img
+            src="/logo.png.jpeg"
+            alt="S. Habib logo"
+            style={{ display: 'block', width: 84, height: 84, objectFit: 'contain', margin: '0 auto 8px', border: 0, boxShadow: 'none' }}
+            onError={e => { e.target.style.display = 'none' }}
+          />
           <h2 style={{ color: 'var(--text-orange)', margin: 0 }}>{company.name || 'S. HABIB STEEL & LASER CRAFT'}</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0' }}>
             {company.tagline || ''}
@@ -246,11 +252,9 @@ export default function BillView({ toast }) {
             {company.pay_account_1_display && <>Account / IBAN: {company.pay_account_1_display}</>}
           </div>
         )}
-        {company.developed_by && (
-          <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            {company.developed_by}
-          </p>
-        )}
+        <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          Developed by: ENGR. Usama Rehman · usamarehman067@gmail.com
+        </p>
       </div>
 
       <div className="card no-print mt-2">

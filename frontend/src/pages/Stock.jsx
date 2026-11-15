@@ -214,6 +214,33 @@ export default function Stock({ toast }) {
       stock_remain_sqft: stockRemainSheets * sheetArea,
     }
   })
+  const stockTotals = filtered.reduce((totals, stock) => {
+    const quantity = parseFloat(stock.quantity) || 0
+    const area = SHEET_AREAS[stock.sheet_size] || 32
+    const kgPerSheet = parseFloat(stock.kg_per_sheet) || 0
+    totals.sheets += quantity
+    totals.kg += quantity * kgPerSheet
+    totals.area += quantity * area
+    return totals
+  }, { sheets: 0, kg: 0, area: 0 })
+  const usageTotals = usageRows.reduce((totals, usage) => {
+    totals.items += parseFloat(usage.items) || 0
+    totals.area += Number(usage.used_sqft) || 0
+    totals.sheets += Number(usage.est_sheets) || 0
+    totals.kg += Number(usage.kg_used) || 0
+    totals.stockArea += Number(usage.stock_remain_sqft) || 0
+    return totals
+  }, { items: 0, area: 0, sheets: 0, kg: 0, stockArea: 0 })
+  const usageHistoryRows = (report?.usage_detail || []).filter(row => {
+    if (filterMat && row.material !== filterMat) return false
+    if (filterGauge && !matchGauge(row.gauge, filterGauge)) return false
+    return true
+  })
+  const usageHistoryTotals = usageHistoryRows.reduce((totals, row) => {
+    totals.pcs += Number(row.pcs) || 0
+    totals.area += Number(row.area) || 0
+    return totals
+  }, { pcs: 0, area: 0 })
 
   const shareStockWA = () => {
     const list = filtered.length ? filtered : rows
@@ -260,6 +287,9 @@ export default function Stock({ toast }) {
       <div className="page-title">
         <span>CNC Sheet Stock &amp; Usage Tracker</span>
         <div className="btn-group">
+          <button className="btn btn-blue btn-sm no-print" onClick={() => window.print()}>
+            🖨️ Print {tab === 'usage' ? 'Usage Statement' : 'Stock Statement'}
+          </button>
           <button className="btn btn-wa btn-sm"
             onClick={() => tab === 'usage' ? shareUsageWA() : shareStockWA()}>
             📲 WA Business
@@ -313,7 +343,7 @@ export default function Stock({ toast }) {
 
       {tab === 'stock' && (
         <>
-          <div className="card">
+          <div className="card no-print">
             <div className="card-header">
               <h3 style={{ color: '#ea580c' }}>{editingStockId !== null ? 'Edit Stock Entry' : '+ Add New Sheets to Stock'}</h3>
             </div>
@@ -365,14 +395,19 @@ export default function Stock({ toast }) {
             </div>
           </div>
 
-          <div className="card">
+          <div className="card print-statement">
             <div className="card-header"><h3>Current Stock (newest first)</h3></div>
+            <div className="stock-summary-grid mb-2">
+              <div className="stock-summary-item"><strong>Total Sheets</strong><span>{fmtNum(stockTotals.sheets)}</span></div>
+              <div className="stock-summary-item"><strong>Total Weight</strong><span>{fmtNum(stockTotals.kg)} Kg</span></div>
+              <div className="stock-summary-item"><strong>Total Area</strong><span>{fmtNum(stockTotals.area)} Sq Ft</span></div>
+            </div>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Material</th><th>Size</th><th>Gauge</th><th>Qty</th>
-                    <th>Kg/Sheet</th><th>Total Kg</th><th>Total SqFt</th><th>Actions</th>
+                    <th>Kg/Sheet</th><th>Total Kg</th><th>Total SqFt</th><th className="no-print">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -393,7 +428,7 @@ export default function Stock({ toast }) {
                         <td>{fmtNum(kg)}</td>
                         <td>{fmtNum(qty * kg)}</td>
                         <td>{fmtNum(qty * area)}</td>
-                        <td className="btn-group">
+                        <td className="btn-group no-print">
                           <button className="btn btn-blue btn-sm" onClick={() => editStock(s)}>Edit</button>
                           <button className="btn btn-orange btn-sm" onClick={() => adjust(s.id)} disabled={s.pending}>± Adjust</button>
                           <button className="btn btn-red btn-sm" onClick={() => deleteStock(s.id, s.material + ' ' + s.gauge + ' ' + s.sheet_size)}>Delete</button>
@@ -401,6 +436,16 @@ export default function Stock({ toast }) {
                       </tr>
                     )
                   })}
+                  {!loading && filtered.length > 0 && (
+                    <tr className="statement-total">
+                      <td colSpan={3}>TOTAL ({filtered.length} entries)</td>
+                      <td>{fmtNum(stockTotals.sheets)}</td>
+                      <td>—</td>
+                      <td>{fmtNum(stockTotals.kg)}</td>
+                      <td>{fmtNum(stockTotals.area)}</td>
+                      <td className="no-print"></td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -410,7 +455,7 @@ export default function Stock({ toast }) {
 
       {tab === 'usage' && (
         <>
-          <div className="card mb-2">
+          <div className="card mb-2 no-print">
             <div className="form-grid" style={{ alignItems: 'end' }}>
               <div className="form-group">
                 <label>Filter Material</label>
@@ -448,7 +493,7 @@ export default function Stock({ toast }) {
             </div>
           </div>
 
-          <div className="btn-group mb-2">
+          <div className="btn-group mb-2 no-print">
             {['daily', 'weekly', 'monthly', 'all'].map(p => (
               <button
                 key={p}
@@ -471,7 +516,7 @@ export default function Stock({ toast }) {
             </p>
           )}
 
-          <div className="card">
+          <div className="card print-statement">
             <div className="card-header"><h3>Usage Summary by Material</h3></div>
             <div className="table-wrap">
               <table>
@@ -501,12 +546,23 @@ export default function Stock({ toast }) {
                         <td>{fmtNum(r.stock_remain_sqft)}</td>
                       </tr>
                     ))}
+                  {usageRows.length > 0 && (
+                    <tr className="statement-total">
+                      <td colSpan={3}>TOTAL ({usageRows.length} materials)</td>
+                      <td>{fmtNum(usageTotals.items)}</td>
+                      <td>{fmtNum(usageTotals.area)}</td>
+                      <td>{fmtNum(usageTotals.sheets)}</td>
+                      <td>{fmtNum(usageTotals.kg)}</td>
+                      <td>—</td>
+                      <td>{fmtNum(usageTotals.stockArea)}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          <div className="card">
+          <div className="card print-statement">
             <div className="card-header"><h3>Usage History (who / when)</h3></div>
             <div className="table-wrap">
               <table>
@@ -518,16 +574,10 @@ export default function Stock({ toast }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(report?.usage_detail || []).length === 0 && (
+                  {!usageHistoryRows.length && (
                     <tr><td colSpan={8} className="empty-state">No usage history yet</td></tr>
                   )}
-                  {(report?.usage_detail || [])
-                    .filter(r => {
-                      if (filterMat && r.material !== filterMat) return false
-                      if (filterGauge && !matchGauge(r.gauge, filterGauge)) return false
-                      return true
-                    })
-                    .map((r, i) => (
+                  {usageHistoryRows.map((r, i) => (
                       <tr key={i}>
                         <td>{String(r.used_at || '').slice(0, 16)}</td>
                         <td>#{r.sr_no}</td>
@@ -539,6 +589,13 @@ export default function Stock({ toast }) {
                         <td>{fmtNum(r.area)}</td>
                       </tr>
                     ))}
+                  {!!usageHistoryRows.length && (
+                    <tr className="statement-total">
+                      <td colSpan={6}>TOTAL ({usageHistoryRows.length} usage entries)</td>
+                      <td>{fmtNum(usageHistoryTotals.pcs)}</td>
+                      <td>{fmtNum(usageHistoryTotals.area)}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

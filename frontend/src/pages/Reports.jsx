@@ -35,6 +35,8 @@ const ALL_CAT_KEYS = ['cnc_only', 'cnc_pipe', 'fancy', 'sheet_sale', 'only_cutti
 
 export default function Reports({ toast }) {
   const [data, setData] = useState(null)
+  const [businessExpenseRows, setBusinessExpenseRows] = useState([])
+  const [foodExpenseRows, setFoodExpenseRows] = useState([])
   const [period, setPeriod] = useState('daily')
   const [selectedYear, setSelectedYear] = useState('')
   // empty set = show all categories
@@ -49,6 +51,22 @@ export default function Reports({ toast }) {
 
   useEffect(() => { load() }, [load])
   useAutoRefresh(load)
+
+  useEffect(() => {
+    if (!data?.from || !data?.to) return
+    let active = true
+    Promise.all([
+      api.listExpenses('business', data.from, data.to),
+      api.listExpenses('personal', data.from, data.to),
+    ])
+      .then(([business, food]) => {
+        if (!active) return
+        setBusinessExpenseRows(business.data || [])
+        setFoodExpenseRows(food.data || [])
+      })
+      .catch(e => { if (active) toast(e.message, true) })
+    return () => { active = false }
+  }, [data?.from, data?.to, toast])
 
   const toggleCat = (key) => {
     setSelectedCats(prev => {
@@ -77,6 +95,8 @@ export default function Reports({ toast }) {
   const matItemsSum = matFiltered.reduce((s, m) => s + (parseInt(m.items) || 0), 0)
   const matAreaSum = matFiltered.reduce((s, m) => s + (parseFloat(m.total_area) || 0), 0)
   const matAmountSum = matFiltered.reduce((s, m) => s + (parseFloat(m.total_amount) || 0), 0)
+  const loggedFoodExpenseTotal = foodExpenseRows.reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0)
+  const billLinkedPersonalTotal = Number(r.bill_personal) || 0
 
   const shareSummaryWA = () => {
     const periodLabel = /^\d{4}-\d{2}$/.test(period)
@@ -94,7 +114,7 @@ export default function Reports({ toast }) {
       `Sale: PKR ${Number(r.gross_total || 0).toLocaleString('en-PK')}`,
       `Paid: PKR ${Number(r.total_paid || 0).toLocaleString('en-PK')}`,
       `Unpaid: PKR ${Number(r.total_remaining || 0).toLocaleString('en-PK')}`,
-      `Expenses: PKR ${Number(data.business_expenses || 0).toLocaleString('en-PK')}`,
+      `Business Expenses: PKR ${Number(data.business_expenses || 0).toLocaleString('en-PK')}`,
       `Food Exp: PKR ${Number(data.personal_expenses || 0).toLocaleString('en-PK')}`,
       `Last Profit: *PKR ${Number(data.profit || 0).toLocaleString('en-PK')}*`,
       '------------------------',
@@ -184,7 +204,7 @@ export default function Reports({ toast }) {
           )}
           <button className="btn btn-wa" style={{ fontWeight: 700, padding: '8px 16px' }}
             onClick={() => { setBusinessWaNumber(waBiz); shareSummaryWA() }}>📲 WhatsApp Business Share</button>
-          <input
+          <input className="no-print"
             value={waBiz}
             onChange={e => setWaBiz(e.target.value.replace(/[^0-9]/g, ''))}
             onBlur={() => setBusinessWaNumber(waBiz)}
@@ -222,8 +242,77 @@ export default function Reports({ toast }) {
         <div className="stat-card green"><div className="label">Last Profit</div><div className="value">{fmt(data.profit)}</div></div>
       </div>
 
+      <div className="card print-statement">
+        <div className="card-header"><h3>Expense Summary</h3></div>
+        <table>
+          <thead><tr><th>Expense Type</th><th>Entries</th><th>Total</th></tr></thead>
+          <tbody>
+            <tr><td>Business Expenses</td><td>{businessExpenseRows.length}</td><td>{fmt(data.business_expenses)}</td></tr>
+            <tr><td>Food Expenses (logged)</td><td>{foodExpenseRows.length}</td><td>{fmt(loggedFoodExpenseTotal)}</td></tr>
+            <tr><td>Bill-linked personal costs</td><td>—</td><td>{fmt(billLinkedPersonalTotal)}</td></tr>
+            <tr><td>Food Expenses Total</td><td>{foodExpenseRows.length}</td><td>{fmt(data.personal_expenses)}</td></tr>
+            <tr className="statement-total">
+              <td>Total Expenses</td>
+              <td>{businessExpenseRows.length + foodExpenseRows.length}</td>
+              <td>{fmt(Number(data.business_expenses || 0) + Number(data.personal_expenses || 0))}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="grid-2 report-expense-details">
+        <div className="card print-statement">
+          <div className="card-header"><h3>Business Expense Details</h3></div>
+          <table>
+            <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr></thead>
+            <tbody>
+              {businessExpenseRows.map(expense => (
+                <tr key={expense.id}>
+                  <td>{expense.expense_date}</td>
+                  <td>{expense.description}</td>
+                  <td>{expense.category || '—'}</td>
+                  <td>{fmt(expense.amount)}</td>
+                </tr>
+              ))}
+              {!businessExpenseRows.length && <tr><td colSpan={4} className="empty-state">No business expenses in this period</td></tr>}
+              <tr className="statement-total">
+                <td colSpan={3}>TOTAL ({businessExpenseRows.length} entries)</td>
+                <td>{fmt(data.business_expenses)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="card print-statement">
+          <div className="card-header"><h3>Food Expense Details</h3></div>
+          <table>
+            <thead><tr><th>Date</th><th>Description</th><th>Amount</th></tr></thead>
+            <tbody>
+              {foodExpenseRows.map(expense => (
+                <tr key={expense.id}>
+                  <td>{expense.expense_date}</td>
+                  <td>{expense.description}</td>
+                  <td>{fmt(expense.amount)}</td>
+                </tr>
+              ))}
+              {!foodExpenseRows.length && <tr><td colSpan={3} className="empty-state">No food expenses in this period</td></tr>}
+              <tr className="statement-total">
+                <td colSpan={2}>Logged food expenses ({foodExpenseRows.length} entries)</td>
+                <td>{fmt(loggedFoodExpenseTotal)}</td>
+              </tr>
+              {billLinkedPersonalTotal > 0 && (
+                <tr><td colSpan={2}>Bill-linked personal costs</td><td>{fmt(billLinkedPersonalTotal)}</td></tr>
+              )}
+              <tr className="statement-total">
+                <td colSpan={2}>FOOD EXPENSE TOTAL</td>
+                <td>{fmt(data.personal_expenses)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Category filter — specific categories or all combined */}
-      <div className="card mb-2" style={{ padding: '12px 16px' }}>
+      <div className="card mb-2 no-print" style={{ padding: '12px 16px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
           <strong style={{ color: 'var(--text-orange)', fontSize: '0.9rem', marginRight: 4 }}>Filter Category:</strong>
           <label style={{

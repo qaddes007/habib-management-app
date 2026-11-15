@@ -1453,15 +1453,26 @@ export async function shareAsImage(title, lines, filename = 'habib-share.png') {
 export async function shareBillAsImage(bill, filename = `habib-bill-${bill?.sr_no || 'receipt'}.png`) {
   if (!bill) throw new Error('Bill details are not available')
 
-  const width = 640
-  const padding = 28
+  const width = 304
+  const padding = 22
   const contentWidth = width - padding * 2
   const measureCanvas = document.createElement('canvas')
   const measureContext = measureCanvas.getContext('2d')
   if (!measureContext) throw new Error('Could not create bill image')
 
+  const loadImage = src => new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error(`Could not load bill image: ${src}`))
+    image.src = src
+  })
+  const [logo, location] = await Promise.all([
+    loadImage('/logo.png.jpeg'),
+    loadImage('/address.png'),
+  ])
+
   const operations = []
-  let y = 28
+  let y = 10
   const wrap = (text, font, maxWidth) => {
     measureContext.font = font
     const words = String(text || '').split(/\s+/).filter(Boolean)
@@ -1491,56 +1502,61 @@ export async function shareBillAsImage(bill, filename = `habib-bill-${bill?.sr_n
     if (line) lines.push(line)
     return lines
   }
-  const addText = (text, { font = '16px Arial, sans-serif', color = '#111827', align = 'left', gap = 5, maxWidth = contentWidth } = {}) => {
+  const addText = (text, { font = '10px Arial, sans-serif', color = '#000', align = 'left', gap = 3, maxWidth = contentWidth } = {}) => {
     const lines = wrap(text, font, maxWidth)
-    const lineHeight = Number(font.match(/\d+(?=px)/)?.[0] || 14) + 6
+    const lineHeight = Number(font.match(/\d+(?=px)/)?.[0] || 10) + 3
     operations.push({ type: 'text', lines, font, color, align, y, lineHeight })
     y += lines.length * lineHeight + gap
   }
-  const addPair = (left, right, { font = '15px Arial, sans-serif', bold = false } = {}) => {
+  const addPair = (left, right, { font = '10px Arial, sans-serif', bold = false } = {}) => {
     const pairFont = bold ? `bold ${font}` : font
-    const rightWidth = 160
+    const rightWidth = Math.min(108, Math.floor(contentWidth * 0.4))
     const leftLines = wrap(left, pairFont, contentWidth - rightWidth - 8)
     const rightLines = wrap(right, pairFont, rightWidth)
-    const lineHeight = Number(font.match(/\d+(?=px)/)?.[0] || 14) + 6
+    const lineHeight = Number(font.match(/\d+(?=px)/)?.[0] || 10) + 3
     const lines = Math.max(leftLines.length, rightLines.length)
     operations.push({ type: 'pair', leftLines, rightLines, font: pairFont, y, lineHeight, rightWidth })
     y += lines * lineHeight + 4
   }
   const addDivider = () => {
     operations.push({ type: 'divider', y })
-    y += 14
+    y += 8
   }
   const addTableRow = (cells, header = false) => {
-    const columnWidths = [41, 152, 58, 82, 70, 76, 105]
-    const font = header ? 'bold 12px Arial, sans-serif' : '12px Arial, sans-serif'
+    const columnWidths = [17, 48, 20, 37, 35, 41, 62]
+    const font = header ? 'bold 8px Arial, sans-serif' : '8px Arial, sans-serif'
     const cellLines = cells.map((cell, index) => wrap(cell, font, columnWidths[index] - 6))
-    const lineHeight = 16
-    const height = Math.max(...cellLines.map(lines => lines.length)) * lineHeight + 8
+    const lineHeight = 10
+    const height = Math.max(...cellLines.map(lines => lines.length)) * lineHeight + 5
     operations.push({ type: 'table', cellLines, columnWidths, font, y, height, header })
     y += height
+  }
+  const addImage = (image, imageWidth, maxHeight) => {
+    const imageHeight = Math.min(maxHeight, image.naturalHeight * imageWidth / image.naturalWidth)
+    operations.push({ type: 'image', image, x: (width - imageWidth) / 2, y, width: imageWidth, height: imageHeight })
+    y += imageHeight + 4
   }
   const money = value => `PKR ${Number(value || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}`
   const company = bill.company || {}
 
+  addImage(logo, 72, 72)
   addText('S. HABIB STEEL & LASER CRAFT', {
-    font: 'bold 22px Arial, sans-serif',
-    color: '#f97316',
+    font: 'bold 12px Arial, sans-serif',
     align: 'center',
-    gap: 2,
+    gap: 1,
   })
-  if (company.tagline) addText(company.tagline, { font: '14px Arial, sans-serif', align: 'center', gap: 2 })
-  if (company.phones) addText(company.phones, { font: '14px Arial, sans-serif', align: 'center', gap: 2 })
-  if (company.address) addText(company.address, { font: '13px Arial, sans-serif', align: 'center' })
+  if (company.tagline) addText(company.tagline, { font: '9px Arial, sans-serif', align: 'center', gap: 1 })
+  if (company.phones) addText(company.phones, { font: '9px Arial, sans-serif', align: 'center', gap: 1 })
+  if (company.address) addText(company.address, { font: '9px Arial, sans-serif', align: 'center' })
   addDivider()
   addPair(`Bill #${bill.sr_no || '—'}`, String(bill.created_at || '').slice(0, 16))
-  addText(`Client: ${bill.client_name || '—'}${bill.client_phone ? `  |  ${bill.client_phone}` : ''}`, { font: 'bold 15px Arial, sans-serif' })
-  addText(`Status: ${bill.payment_status || 'UNPAID'}`, { font: '14px Arial, sans-serif' })
+  addText(`Client: ${bill.client_name || '—'}${bill.client_phone ? ` | ${bill.client_phone}` : ''}`, { font: 'bold 10px Arial, sans-serif' })
+  addText(`Status: ${bill.payment_status || 'UNPAID'}`, { font: '9px Arial, sans-serif' })
   addDivider()
 
   const frames = bill.frames || []
   if (bill.offline_summary || !frames.length) {
-    addText('Item details unavailable', { font: '14px Arial, sans-serif', align: 'center' })
+    addText('Item details unavailable', { font: '9px Arial, sans-serif', align: 'center' })
   } else {
     addTableRow(['#', 'MAT', 'G', 'SIZE', 'SQFT', 'RATE', 'TOTAL'], true)
     frames.forEach((frame, index) => {
@@ -1607,41 +1623,44 @@ export async function shareBillAsImage(bill, filename = `habib-bill-${bill?.sr_n
   const bendTotal = frames.reduce((sum, frame) => sum + (Number(frame.bend_rate) || 0) * (Number(frame.bend_count) || 0), 0)
   if (bendTotal > 0) addPair('Bending Total', money(bendTotal))
   addDivider()
-  addPair('Grand Total', money(bill.grand_total), { font: 'bold 18px Arial, sans-serif' })
+  addPair('Grand Total', money(bill.grand_total), { font: 'bold 12px Arial, sans-serif' })
   addPair('Discount', money(bill.discount))
   addPair('Paid', money(bill.paid_amount))
-  addPair('Due', money(bill.remaining_balance), { font: 'bold 17px Arial, sans-serif' })
+  addPair('Due', money(bill.remaining_balance), { font: 'bold 11px Arial, sans-serif' })
   addDivider()
-  addText('QUALITY • ACCURACY • RELIABILITY', { font: 'bold 13px Arial, sans-serif', align: 'center', gap: 3 })
-  addText('Developed by: ENGR. Usama Rehman · 03158323077', { font: '12px Arial, sans-serif', align: 'center', gap: 3 })
-  addText('*** Thank You ***', { font: 'bold 15px Arial, sans-serif', align: 'center', gap: 3 })
-  addText('Shop Location', { font: '12px Arial, sans-serif', align: 'center', gap: 2 })
-  addText('S. HABIB STEEL & LASER CRAFT', { font: '12px Arial, sans-serif', color: '#6b7280', align: 'center', gap: 0 })
+  addText('QUALITY • ACCURACY • RELIABILITY', { font: 'bold 9px Arial, sans-serif', align: 'center', gap: 2 })
+  addText('Developed by: ENGR. Usama Rehman', { font: '8px Arial, sans-serif', align: 'center', gap: 1 })
+  addText('usamarehman067@gmail.com', { font: '8px Arial, sans-serif', align: 'center', gap: 2 })
+  addText('*** Thank You ***', { font: 'bold 10px Arial, sans-serif', align: 'center', gap: 3 })
+  addText('Shop Location', { font: '8px Arial, sans-serif', align: 'center', gap: 2 })
+  addImage(location, contentWidth, 170)
 
   const canvas = document.createElement('canvas')
   canvas.width = width
-  canvas.height = Math.ceil(y + 24)
+  canvas.height = Math.ceil(y + 10)
   const context = canvas.getContext('2d')
   if (!context) throw new Error('Could not create bill image')
   context.fillStyle = '#fff'
   context.fillRect(0, 0, canvas.width, canvas.height)
-  context.fillStyle = '#f97316'
-  context.fillRect(0, 0, canvas.width, 8)
   context.textBaseline = 'top'
   for (const operation of operations) {
+    if (operation.type === 'image') {
+      context.drawImage(operation.image, operation.x, operation.y, operation.width, operation.height)
+      continue
+    }
     if (operation.type === 'divider') {
-      context.strokeStyle = '#9ca3af'
-      context.setLineDash([6, 5])
+      context.strokeStyle = '#000'
+      context.setLineDash([3, 3])
       context.beginPath()
-      context.moveTo(padding, operation.y + 5)
-      context.lineTo(width - padding, operation.y + 5)
+      context.moveTo(padding, operation.y + 3)
+      context.lineTo(width - padding, operation.y + 3)
       context.stroke()
       context.setLineDash([])
       continue
     }
     if (operation.type === 'table') {
       context.font = operation.font
-      context.fillStyle = '#111827'
+      context.fillStyle = '#000'
       let x = padding
       operation.cellLines.forEach((lines, index) => {
         const align = operation.header || index === 2 || index === 3 || index === 4 || index === 5
@@ -1653,10 +1672,10 @@ export async function shareBillAsImage(bill, filename = `habib-bill-${bill?.sr_n
           : align === 'right'
             ? x + operation.columnWidths[index] - 3
             : x + 3
-        lines.forEach((line, lineIndex) => context.fillText(line, cellX, operation.y + 4 + lineIndex * 16))
+        lines.forEach((line, lineIndex) => context.fillText(line, cellX, operation.y + 3 + lineIndex * 10))
         x += operation.columnWidths[index]
       })
-      context.strokeStyle = '#6b7280'
+      context.strokeStyle = '#000'
       context.beginPath()
       context.moveTo(padding, operation.y + operation.height)
       context.lineTo(width - padding, operation.y + operation.height)
@@ -1671,7 +1690,7 @@ export async function shareBillAsImage(bill, filename = `habib-bill-${bill?.sr_n
       operation.lines.forEach((line, index) => context.fillText(line, x, operation.y + index * operation.lineHeight))
       continue
     }
-    context.fillStyle = '#111827'
+    context.fillStyle = '#000'
     context.textAlign = 'left'
     operation.leftLines.forEach((line, index) => context.fillText(line, padding, operation.y + index * operation.lineHeight))
     context.textAlign = 'right'

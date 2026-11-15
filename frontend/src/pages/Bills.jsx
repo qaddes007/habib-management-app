@@ -72,7 +72,7 @@ export default function Bills({ toast }) {
       const d = await api.getBill(id)
       const sr = d.data?.sr_no || id
       const result = await shareBillAsImage(d.data, 'habib-bill-' + sr + '.png')
-      if (result.downloaded) toast('Bill image downloaded. Attach the PNG in WhatsApp; no bill text was sent.')
+      if (result.downloaded) toast('80mm bill image downloaded. Attach the PNG in WhatsApp.')
     } catch (e) {
       toast(e.message, true)
     }

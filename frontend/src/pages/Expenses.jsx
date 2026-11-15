@@ -78,13 +78,27 @@ function ExpensePanel({ type, title, toast }) {
     }
   }
 
+  const printStatement = () => {
+    const body = document.body
+    body.dataset.printExpenseType = type
+    const clearPrintTarget = () => {
+      if (body.dataset.printExpenseType === type) delete body.dataset.printExpenseType
+    }
+    window.addEventListener('afterprint', clearPrintTarget, { once: true })
+    window.print()
+  }
+
   return (
-    <div className="card">
+    <div className="card expense-panel print-statement" data-expense-type={type}>
       <div className="card-header">
         <h3>{title}</h3>
-        <span className="text-gold">{fmt(total)}</span>
+        <div className="btn-group">
+          <span className="text-gold">{fmt(total)}</span>
+          <button className="btn btn-blue btn-sm no-print" onClick={printStatement}>🖨️ Print Statement</button>
+        </div>
       </div>
-      <div className="form-grid mb-2">
+      <p className="print-only">Statement period: {from} to {to}</p>
+      <div className="form-grid mb-2 no-print">
         <div className="form-group">
           <label>Description</label>
           <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="e.g. Electricity" />
@@ -107,7 +121,7 @@ function ExpensePanel({ type, title, toast }) {
           <input type="date" value={date} onChange={e => setDate(e.target.value)} />
         </div>
       </div>
-      <div className="btn-group mb-2" style={{ justifyContent: 'space-between' }}>
+      <div className="btn-group mb-2 no-print" style={{ justifyContent: 'space-between' }}>
         <div className="btn-group">
           <button className="btn btn-orange btn-sm" onClick={save}>
             {editId ? '💾 Update' : '+ Add'}
@@ -126,22 +140,27 @@ function ExpensePanel({ type, title, toast }) {
       <div className="table-wrap">
         <table>
           <thead>
-            <tr><th>Date</th><th>Desc</th>{type === 'business' && <th>Cat</th>}<th>Amount</th><th>Actions</th></tr>
+            <tr><th>Date</th><th>Description</th>{type === 'business' && <th>Category</th>}<th>Amount</th><th className="no-print">Actions</th></tr>
           </thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={5} className="empty-state">No expenses</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={type === 'business' ? 5 : 4} className="empty-state">No expenses</td></tr>}
             {rows.map(e => (
               <tr key={e.id} style={editId === e.id ? { background: 'rgba(249,115,22,0.12)' } : undefined}>
                 <td>{e.expense_date}</td>
                 <td>{e.description}{e.pending && <span className="badge badge-unpaid" style={{ marginLeft: 8 }}>Pending sync</span>}</td>
                 {type === 'business' && <td>{e.category || '—'}</td>}
                 <td>{fmt(e.amount)}</td>
-                <td className="btn-group">
+                <td className="btn-group no-print">
                   <button className="btn btn-blue btn-sm" onClick={() => startEdit(e)}>Edit</button>
                   <button className="btn btn-red btn-sm" onClick={() => del(e.id)}>Del</button>
                 </td>
               </tr>
             ))}
+            <tr className="statement-total">
+              <td colSpan={type === 'business' ? 3 : 2}>TOTAL ({rows.length} entries)</td>
+              <td>{fmt(total)}</td>
+              <td className="no-print"></td>
+            </tr>
           </tbody>
         </table>
       </div>

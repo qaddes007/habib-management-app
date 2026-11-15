@@ -1,7 +1,7 @@
 import { CAT_LABELS, getFrameGaugeLabel } from '../api/client'
 
 /**
- * 80mm thermal bill — clean columns + logo/QR side by side
+ * 80mm thermal bill with a centered logo and compact item columns.
  */
 function normalizeGaugeText(value) {
   const raw = String(value ?? '').trim()
@@ -98,50 +98,52 @@ export default function ThermalPrint({ bill, onClose }) {
       #thermal-text [style*="font-size: 10px"] { font-size: 12px !important; }
       #thermal-text [style*="font-size: 11px"] { font-size: 13px !important; }
       #thermal-text img { max-width: 100%; }
-      #thermal-text img[alt="logo"], #thermal-text img[alt="qr"] {
+      #thermal-text img {
         border: 0 !important;
         outline: 0 !important;
         box-shadow: none !important;
       }
-      #thermal-text img[alt="logo"] { filter: grayscale(1) contrast(1.7) brightness(.9) !important; }
-      #thermal-text img[alt="qr"] { width: 68px; height: 68px; }
+      #thermal-text img[alt="logo"] { filter: none !important; }
       #thermal-text img[alt="location"] {
         width: 100%;
         max-height: 60mm;
         object-fit: contain;
-        filter: grayscale(1) contrast(1.7) brightness(.9) !important;
+        filter: none !important;
       }
       #thermal-text tr { break-inside: avoid; page-break-inside: avoid; }
     `
     printDocument.head.appendChild(style)
 
     const content = el.cloneNode(true)
+    const imagesReady = []
     content.querySelectorAll('img').forEach(image => {
       const src = image.getAttribute('src')
-      if (src) image.src = new URL(src.replace(/^\/+/, ''), base.href).href
-      image.addEventListener('error', () => image.remove(), { once: true })
+      if (src) {
+        image.removeAttribute('src')
+        imagesReady.push(new Promise((resolve, reject) => {
+          image.addEventListener('load', () => {
+            const decoded = image.decode ? image.decode() : Promise.resolve()
+            decoded.then(resolve, reject)
+          }, { once: true })
+          image.addEventListener('error', () => reject(new Error(`Could not load bill image: ${image.alt}`)), { once: true })
+          image.src = new URL(src.replace(/^\/+/, ''), base.href).href
+        }))
+      }
     })
     printDocument.body.appendChild(content)
 
-    const imagesReady = Array.from(printDocument.images).map(image => {
-      if (image.complete) return Promise.resolve()
-      return new Promise(resolve => {
-        image.addEventListener('load', resolve, { once: true })
-        image.addEventListener('error', resolve, { once: true })
-      })
-    })
     printDocument.close()
 
-    Promise.race([
-      Promise.all(imagesReady),
-      new Promise(resolve => printWindow.setTimeout(resolve, 1500)),
-    ]).then(() => {
+    Promise.all(imagesReady).then(() => {
       if (printWindow.closed) return
       printWindow.requestAnimationFrame(() => printWindow.requestAnimationFrame(() => {
         if (printWindow.closed) return
         printWindow.focus()
         printWindow.print()
       }))
+    }).catch(error => {
+      if (!printWindow.closed) printWindow.close()
+      window.alert(`Could not prepare bill images for printing: ${error.message}`)
     })
   }
 
@@ -179,51 +181,32 @@ export default function ThermalPrint({ bill, onClose }) {
           }}
         >
           <div id="thermal-text">
-            {/* ===== Logo + QR side by side ===== */}
             <div
               style={{
                 display: 'flex',
-                flexDirection: 'row',
-                justifyContent: 'space-between',
+                justifyContent: 'center',
                 alignItems: 'center',
-                gap: 8,
                 marginBottom: 6,
               }}
             >
-              <div style={{ flex: '0 0 42%', textAlign: 'center' }}>
-                <img
-                  src="/logo.png.jpeg"
-                  alt="logo"
-                  style={{
-                    maxWidth: 72,
-                    maxHeight: 72,
-                    width: 'auto',
-                    height: 'auto',
-                    objectFit: 'contain',
-                    display: 'block',
-                    margin: '0 auto',
-                    filter: 'grayscale(1) contrast(1.1)',
-                  }}
-                  onError={e => { e.target.style.display = 'none' }}
-                />
-              </div>
-              <div style={{ flex: '0 0 52%', textAlign: 'center' }}>
-                <img
-                  src="/qrcode.png"
-                  alt="qr"
-                  style={{
-                    maxWidth: 68,
-                    maxHeight: 68,
-                    width: 'auto',
-                    height: 'auto',
-                    objectFit: 'contain',
-                    display: 'block',
-                    margin: '0 auto',
-                  }}
-                  onError={e => { e.target.style.display = 'none' }}
-                />
-                <div style={{ fontSize: 7, marginTop: 2 }}>SCAN TO OPEN TIKTOK</div>
-              </div>
+              <img
+                src="/logo.png.jpeg"
+                alt="logo"
+                style={{
+                  maxWidth: 72,
+                  maxHeight: 72,
+                  width: 'auto',
+                  height: 'auto',
+                  objectFit: 'contain',
+                  display: 'block',
+                  margin: '0 auto',
+                  border: 0,
+                  outline: 0,
+                  boxShadow: 'none',
+                  filter: 'none',
+                }}
+                onError={e => { e.target.style.display = 'none' }}
+              />
             </div>
 
             <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 11, lineHeight: 1.2 }}>
@@ -232,6 +215,7 @@ export default function ThermalPrint({ bill, onClose }) {
             <div style={{ textAlign: 'center', fontSize: 8, lineHeight: 1.35, marginTop: 2 }}>
               {company.tagline || ''}
               {company.phones && <><br />{company.phones}</>}
+              {company.address && <><br />{company.address}</>}
             </div>
 
             <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
@@ -366,8 +350,8 @@ export default function ThermalPrint({ bill, onClose }) {
               QUALITY • ACCURACY • RELIABILITY
             </div>
             <div style={{ textAlign: 'center', fontSize: 8, marginTop: 2 }}>
-              Developed by : ENGR.UsamaRehman :<br />
-              03158323077
+              Developed by: ENGR. Usama Rehman<br />
+              usamarehman067@gmail.com
             </div>
             <div style={{ textAlign: 'center', fontWeight: 'bold', margin: '4px 0', fontSize: 10 }}>
               *** Thank You ***
