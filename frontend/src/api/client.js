@@ -488,6 +488,14 @@ function normalizePendingStockMaterial(material) {
   return null;
 }
 
+function reportFrameMaterial(frame) {
+  const raw = frame.bill_category === 'cnc_pipe'
+    ? frame.cnc_material || frame.material
+    : frame.material || frame.cnc_material;
+  const value = String(raw || '').trim() || '(no material)';
+  return normalizePendingStockMaterial(value) || value;
+}
+
 function reportFrameGauge(frame) {
   if (frame.bill_category === 'pipe_grill') return frame.pipe_gauge || frame.gauge || '';
   if (frame.bill_category === 'cnc_only') return frame.gauge || frame.cnc_gauge || '';
@@ -511,8 +519,8 @@ function applyPendingStockChanges(rows, queue) {
   const adjustForBill = (bill, direction) => {
     if (!bill) return;
     for (const frame of bill.frames || []) {
-      if (!['cnc_only', 'cnc_pipe', 'sheet_sale'].includes(frame.bill_category)) continue;
-      const material = normalizePendingStockMaterial(frame.cnc_material || frame.material);
+      if (['bending_sheet', 'bending_only', 'only_cutting'].includes(frame.bill_category)) continue;
+      const material = normalizePendingStockMaterial(reportFrameMaterial(frame));
       if (!material) continue;
 
       const width = Number(frame.width) || 0;
@@ -525,13 +533,7 @@ function applyPendingStockChanges(rows, queue) {
         : (area > 0 ? Math.round((area / sheetArea) * 100) / 100 : 0);
       if (sheetsNeeded <= 0) continue;
 
-      const gauge = frame.bill_category === 'pipe_grill'
-        ? frame.pipe_gauge || frame.gauge || ''
-        : frame.bill_category === 'sheet_sale'
-          ? frame.gauge || frame.cnc_gauge || ''
-          : frame.bill_category === 'cnc_only'
-            ? frame.gauge || frame.cnc_gauge || ''
-            : frame.cnc_gauge || frame.gauge || '';
+      const gauge = reportFrameGauge(frame);
       const size = frame.sheet_size || '4x8';
       const existing = rows.find(row =>
         row.material === material &&
@@ -831,11 +833,7 @@ function addQueuedChanges(url, response) {
           if (category.items <= 0) result.by_category = result.by_category.filter(row => row !== category);
         }
 
-        const rawMaterial = String(frame.cnc_material || frame.material || '').trim() || '(no material)';
-        const reportMaterial = ['MS-CNC', 'SS-CNC', 'SG-CNC', 'GP', 'MS-BLACK', 'SS-SILVER', 'SS-GOLDEN']
-          .find(base => rawMaterial.toLowerCase() === base.toLowerCase() || rawMaterial.toLowerCase().endsWith(base.toLowerCase()));
-        const aliases = { 'MS-BLACK': 'MS-CNC', 'SS-SILVER': 'SS-CNC', 'SS-GOLDEN': 'SG-CNC' };
-        const material = aliases[reportMaterial] || reportMaterial || rawMaterial;
+        const material = reportFrameMaterial(frame);
         const gauge = reportFrameGauge(frame);
         const size = frame.sheet_size || '';
         if (sign > 0) {
@@ -918,12 +916,9 @@ function addQueuedChanges(url, response) {
       result.recent_bills = [{ ...bill, pending: true }, ...(result.recent_bills || [])];
       result.usage_detail = result.usage_detail || [];
       for (const frame of bill.frames) {
-        const rawMaterial = String(frame.cnc_material || frame.material || '').trim() || '(no material)';
-        const reportMaterial = ['MS-CNC', 'SS-CNC', 'SG-CNC', 'GP', 'MS-BLACK', 'SS-SILVER', 'SS-GOLDEN']
-          .find(base => rawMaterial.toLowerCase() === base.toLowerCase() || rawMaterial.toLowerCase().endsWith(base.toLowerCase()));
-        const aliases = { 'MS-BLACK': 'MS-CNC', 'SS-SILVER': 'SS-CNC', 'SS-GOLDEN': 'SG-CNC' };
+        const material = reportFrameMaterial(frame);
         result.usage_detail.push({
-          material: aliases[reportMaterial] || reportMaterial || rawMaterial,
+          material,
           gauge: reportFrameGauge(frame),
           sheet_size: frame.sheet_size || '',
           bill_category: frame.bill_category || '',
@@ -958,11 +953,7 @@ function addQueuedChanges(url, response) {
         category.items = (Number(category.items) || 0) + (Number(frame.pcs) || 1);
         category.amount = (Number(category.amount) || 0) + (Number(frame.total) || 0);
 
-        const rawMaterial = String(frame.cnc_material || frame.material || '').trim() || '(no material)';
-        const reportMaterial = ['MS-CNC', 'SS-CNC', 'SG-CNC', 'GP', 'MS-BLACK', 'SS-SILVER', 'SS-GOLDEN']
-          .find(base => rawMaterial.toLowerCase() === base.toLowerCase() || rawMaterial.toLowerCase().endsWith(base.toLowerCase()));
-        const aliases = { 'MS-BLACK': 'MS-CNC', 'SS-SILVER': 'SS-CNC', 'SS-GOLDEN': 'SG-CNC' };
-        const material = aliases[reportMaterial] || reportMaterial || rawMaterial;
+        const material = reportFrameMaterial(frame);
         const gauge = reportFrameGauge(frame);
         const size = frame.sheet_size || '';
         result.material_usage = result.material_usage || [];

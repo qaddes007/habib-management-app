@@ -443,7 +443,7 @@ function normalizeGaugeValue(?string $value): string {
 }
 
 function consumeStockForBill(PDO $db, int $billId): void {
-    $stmt = $db->prepare("SELECT * FROM bill_frames WHERE bill_id=? AND bill_category IN ('cnc_only','cnc_pipe','sheet_sale')");
+    $stmt = $db->prepare("SELECT * FROM bill_frames WHERE bill_id=? AND COALESCE(bill_category,'cnc_only') NOT IN ('bending_sheet','bending_only','only_cutting')");
     $stmt->execute([$billId]);
     $frames = $stmt->fetchAll();
 
