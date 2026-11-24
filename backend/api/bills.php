@@ -320,7 +320,7 @@ try {
                        ->execute([$billId, $pe['description'] ?? '', (float)($pe['cost'] ?? 0)]);
                 }
 
-                // Consume stock for CNC categories
+                // Consume stock only for categories that use sheet inventory.
                 consumeStockForBill($db, $billId);
 
                 // If update and paid changed, add payment history entry
@@ -450,14 +450,13 @@ function normalizeGaugeValue(?string $value): string {
 }
 
 function consumeStockForBill(PDO $db, int $billId): void {
-    $stmt = $db->prepare("SELECT * FROM bill_frames WHERE bill_id=? AND bill_category IN ('cnc_only','cnc_pipe','bending_only','sheet_sale')");
+    $stmt = $db->prepare("SELECT * FROM bill_frames WHERE bill_id=? AND bill_category IN ('cnc_only','cnc_pipe','sheet_sale')");
     $stmt->execute([$billId]);
     $frames = $stmt->fetchAll();
 
     foreach ($frames as $f) {
-        $isBendingOnly = $f['bill_category'] === 'bending_only';
         $isSheetSale = $f['bill_category'] === 'sheet_sale';
-        $raw = ($isBendingOnly || $isSheetSale) ? $f['material'] : ($f['cnc_material'] ?: $f['material']);
+        $raw = $isSheetSale ? $f['material'] : ($f['cnc_material'] ?: $f['material']);
         $mat = normalizeSheetMaterial((string)$raw);
         if (!$mat) continue; // skip pipe-only / unknown
 

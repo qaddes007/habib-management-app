@@ -113,7 +113,9 @@ export default function Stock({ toast }) {
     return true
   })
 
-  const materialUsage = report?.material_usage || []
+  const stockUsageCategories = ['cnc_only', 'cnc_pipe', 'sheet_sale']
+  const materialUsage = (report?.material_usage || [])
+    .filter(row => stockUsageCategories.includes(row.bill_category))
   const stockList = rows.length ? rows : (report?.stock || [])
   const gaugeOptions = [...new Set([
     ...CNC_GAUGES.map(g => `${g} Gauge`),
@@ -232,6 +234,7 @@ export default function Stock({ toast }) {
     return totals
   }, { items: 0, area: 0, sheets: 0, kg: 0, stockArea: 0 })
   const usageHistoryRows = (report?.usage_detail || []).filter(row => {
+    if (!stockUsageCategories.includes(row.bill_category)) return false
     if (filterMat && row.material !== filterMat) return false
     if (filterGauge && !matchGauge(row.gauge, filterGauge)) return false
     return true
@@ -530,7 +533,7 @@ export default function Stock({ toast }) {
                 <tbody>
                   {usageRows.length === 0 && (
                     <tr><td colSpan={9} className="empty-state">
-                      No matching records. Create a CNC, Bending, or Only Cutting bill first.
+                      No matching stock usage. Create a CNC or Sheet Sale bill first.
                     </td></tr>
                   )}
                   {usageRows.map((r, i) => (

@@ -27,124 +27,112 @@ export default function ThermalPrint({ bill, onClose }) {
     0
   )
 
-  const printThermal = () => {
+  const printThermal = async () => {
     const el = document.getElementById('thermal-print-area')
     if (!el) return
-    const printWindow = window.open('', '_blank', 'width=380,height=700')
-    if (!printWindow) {
-      window.alert('Allow pop-ups for this app to print the 80mm bill.')
-      return
-    }
-
-    const printDocument = printWindow.document
-    printDocument.open()
-    printDocument.write('<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>')
-    printDocument.title = `Thermal Bill #${bill.sr_no}`
-
-    const base = printDocument.createElement('base')
-    base.href = new URL('.', document.baseURI).href
-    printDocument.head.appendChild(base)
-
-    const style = printDocument.createElement('style')
+    const style = document.createElement('style')
+    style.dataset.thermalPrint = 'true'
     style.textContent = `
-      @page { size: 80mm auto; margin: 0; }
-      * { box-sizing: border-box; }
-      html, body { width: 72mm; margin: 0; padding: 0; color: #000; background: #fff; }
-      body {
-        margin: 0 auto;
-        font: 12px/1.35 Arial, Helvetica, sans-serif;
-        font-weight: 700;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+      @media print {
+        @page { size: 80mm auto; margin: 0; }
+        html, body, #root {
+          width: 80mm !important;
+          min-width: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #fff !important;
+          color: #000 !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        body * { visibility: hidden !important; }
+        #thermal-print-area, #thermal-print-area * { visibility: visible !important; }
+        .modal-overlay, .modal {
+          position: static !important;
+          overflow: visible !important;
+          transform: none !important;
+          animation: none !important;
+        }
+        #thermal-print-area {
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          width: 72mm !important;
+          max-width: 72mm !important;
+          margin: 0 !important;
+          padding: 1.5mm !important;
+          overflow: visible !important;
+          border: 0 !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          background: #fff !important;
+          color: #000 !important;
+          font: 12px/1.35 Arial, Helvetica, sans-serif !important;
+          font-weight: 700 !important;
+        }
+        #thermal-text, #thermal-text * {
+          color: #000 !important;
+          font-weight: 700 !important;
+          text-rendering: optimizeLegibility;
+        }
+        #thermal-text { width: 100% !important; font-size: 12px !important; line-height: 1.35 !important; }
+        #thermal-text table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; }
+        #thermal-text th, #thermal-text td {
+          padding: 3px 1px !important;
+          vertical-align: top !important;
+          overflow-wrap: anywhere !important;
+          word-break: normal !important;
+        }
+        #thermal-text th { border-bottom: 1px solid #000 !important; font-size: 10px !important; }
+        #thermal-text td { border-bottom: 1px solid #000 !important; font-size: 11px !important; }
+        #thermal-text [style*="font-size: 7px"] { font-size: 9px !important; }
+        #thermal-text [style*="font-size: 8px"] { font-size: 10px !important; }
+        #thermal-text [style*="font-size: 9px"] { font-size: 11px !important; }
+        #thermal-text [style*="font-size: 10px"] { font-size: 12px !important; }
+        #thermal-text [style*="font-size: 11px"] { font-size: 13px !important; }
+        #thermal-text img { max-width: 100% !important; }
+        #thermal-text img[alt="logo"] {
+          display: block !important;
+          width: auto !important;
+          height: auto !important;
+          max-width: 88px !important;
+          max-height: 88px !important;
+          object-fit: contain !important;
+        }
+        #thermal-text img[alt="location"] {
+          display: block !important;
+          width: 100% !important;
+          height: 50mm !important;
+          max-height: none !important;
+          object-fit: contain !important;
+          transform: scaleY(1.3) !important;
+          transform-origin: top !important;
+        }
+        #thermal-location-crop { height: 50mm !important; }
+        #thermal-text tr { break-inside: avoid !important; page-break-inside: avoid !important; }
       }
-      #thermal-print-area {
-        width: 100% !important;
-        max-width: none !important;
-        margin: 0 !important;
-        padding: 1.5mm !important;
-        overflow: visible !important;
-        border-radius: 0 !important;
-        color: #000 !important;
-        background: #fff !important;
-      }
-      #thermal-text {
-        width: 100%;
-        font-size: 12px;
-        line-height: 1.35;
-        color: #000 !important;
-        font-weight: 700 !important;
-        text-rendering: optimizeLegibility;
-      }
-      #thermal-text * { color: #000 !important; font-weight: 700 !important; }
-      #thermal-text table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      #thermal-text th, #thermal-text td {
-        padding: 3px 1px !important;
-        vertical-align: top;
-        overflow-wrap: anywhere;
-        word-break: normal;
-      }
-      #thermal-text th {
-        border-bottom: 1px solid #000 !important;
-        font-size: 10px !important;
-        font-weight: 700 !important;
-      }
-      #thermal-text td {
-        border-bottom: 1px solid #000 !important;
-        font-size: 11px !important;
-      }
-      #thermal-text [style*="font-size: 7px"] { font-size: 9px !important; }
-      #thermal-text [style*="font-size: 8px"] { font-size: 10px !important; }
-      #thermal-text [style*="font-size: 9px"] { font-size: 11px !important; }
-      #thermal-text [style*="font-size: 10px"] { font-size: 12px !important; }
-      #thermal-text [style*="font-size: 11px"] { font-size: 13px !important; }
-      #thermal-text img { max-width: 100%; }
-      #thermal-text img {
-        border: 0 !important;
-        outline: 0 !important;
-        box-shadow: none !important;
-      }
-      #thermal-text img[alt="logo"] { filter: none !important; }
-      #thermal-text img[alt="location"] {
-        width: 100%;
-        max-height: 60mm;
-        object-fit: contain;
-        filter: none !important;
-      }
-      #thermal-text tr { break-inside: avoid; page-break-inside: avoid; }
     `
-    printDocument.head.appendChild(style)
+    document.head.appendChild(style)
+    const cleanup = () => style.remove()
+    window.addEventListener('afterprint', cleanup, { once: true })
 
-    const content = el.cloneNode(true)
-    const imagesReady = []
-    content.querySelectorAll('img').forEach(image => {
-      const src = image.getAttribute('src')
-      if (src) {
-        image.removeAttribute('src')
-        imagesReady.push(new Promise((resolve, reject) => {
-          image.addEventListener('load', () => {
-            const decoded = image.decode ? image.decode() : Promise.resolve()
-            decoded.then(resolve, reject)
-          }, { once: true })
-          image.addEventListener('error', () => reject(new Error(`Could not load bill image: ${image.alt}`)), { once: true })
-          image.src = new URL(src.replace(/^\/+/, ''), base.href).href
-        }))
-      }
-    })
-    printDocument.body.appendChild(content)
-
-    printDocument.close()
-
-    Promise.all(imagesReady).then(() => {
-      if (printWindow.closed) return
-      printWindow.requestAnimationFrame(() => printWindow.requestAnimationFrame(() => {
-        if (printWindow.closed) return
-        printWindow.focus()
-        printWindow.print()
+    try {
+      await Promise.all(Array.from(el.querySelectorAll('img'), async image => {
+        if (!image.complete) {
+          await new Promise((resolve, reject) => {
+            image.addEventListener('load', resolve, { once: true })
+            image.addEventListener('error', () => reject(new Error(`Could not load bill image: ${image.alt}`)), { once: true })
+          })
+        }
+        if (!image.naturalWidth) throw new Error(`Could not load bill image: ${image.alt}`)
+        if (image.decode) await image.decode()
       }))
-    }).catch(error => {
-      if (!printWindow.closed) printWindow.close()
+      window.print()
+    } catch (error) {
+      cleanup()
+      window.removeEventListener('afterprint', cleanup)
       window.alert(`Could not prepare bill images for printing: ${error.message}`)
-    })
+    }
   }
 
   const copyText = () => {
@@ -193,8 +181,8 @@ export default function ThermalPrint({ bill, onClose }) {
                 src="/logo.png.jpeg"
                 alt="logo"
                 style={{
-                  maxWidth: 72,
-                  maxHeight: 72,
+                  maxWidth: 84,
+                  maxHeight: 84,
                   width: 'auto',
                   height: 'auto',
                   objectFit: 'contain',
@@ -305,7 +293,7 @@ export default function ThermalPrint({ bill, onClose }) {
                         {sizeStr}
                       </td>
                       <td style={{ fontSize: 9, textAlign: 'center', padding: '4px 1px', verticalAlign: 'top', borderBottom: '1px dotted #bbb' }}>
-                        {isOnlyCutting || isSheetSale || isBending ? '—' : Number(f.area || (isFancy ? f.width : 0) || 0).toFixed(2)}
+                        {isOnlyCutting || isSheetSale || isBending || isBendOnly ? '—' : Number(f.area || (isFancy ? f.width : 0) || 0).toFixed(2)}
                       </td>
                       <td style={{ fontSize: 9, textAlign: 'center', padding: '4px 1px', verticalAlign: 'top', borderBottom: '1px dotted #bbb' }}>
                         {isBendOnly ? `${money(f.bend_rate || 0)}/kg` : isBending ? `${money(f.bend_rate || 0)}/bend` : isFancy ? `${money(f.rate || 0)}/sf` : isSheetSale ? `${money(f.direct_price || 0)}/sheet` : isOnlyCutting ? '—' : money(f.rate || f.direct_price || 0)}
@@ -359,12 +347,14 @@ export default function ThermalPrint({ bill, onClose }) {
 
             <div style={{ textAlign: 'center', marginTop: 6 }}>
               <div style={{ fontSize: 8 }}>Shop Location</div>
-              <img
-                src="/address.png"
-                alt="location"
-                style={{ maxWidth: '100%', marginTop: 3 }}
-                onError={e => { e.target.style.display = 'none' }}
-              />
+              <div id="thermal-location-crop" style={{ height: 180, overflow: 'hidden', marginTop: 3 }}>
+                <img
+                  src="/address.png"
+                  alt="location"
+                  style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'top', transform: 'scaleY(1.3)', transformOrigin: 'top' }}
+                  onError={e => { e.target.style.display = 'none' }}
+                />
+              </div>
             </div>
           </div>
         </div>

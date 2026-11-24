@@ -1531,9 +1531,17 @@ export async function shareBillAsImage(bill, filename = `habib-bill-${bill?.sr_n
     operations.push({ type: 'table', cellLines, columnWidths, font, y, height, header })
     y += height
   }
-  const addImage = (image, imageWidth, maxHeight) => {
-    const imageHeight = Math.min(maxHeight, image.naturalHeight * imageWidth / image.naturalWidth)
-    operations.push({ type: 'image', image, x: (width - imageWidth) / 2, y, width: imageWidth, height: imageHeight })
+  const addImage = (image, imageWidth, maxHeight, sourceHeight = image.naturalHeight, heightScale = 1) => {
+    const imageHeight = Math.min(maxHeight, sourceHeight * imageWidth / image.naturalWidth * heightScale)
+    operations.push({
+      type: 'image',
+      image,
+      sourceHeight,
+      x: (width - imageWidth) / 2,
+      y,
+      width: imageWidth,
+      height: imageHeight,
+    })
     y += imageHeight + 4
   }
   const money = value => `PKR ${Number(value || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}`
@@ -1594,7 +1602,7 @@ export async function shareBillAsImage(bill, filename = `habib-bill-${bill?.sr_n
       }
       if (tags.length) labels.push(tags.join(', '))
       if (isOnlyCutting) labels.push(`Qty: ${Number(frame.pcs) || 1}`)
-      const area = isOnlyCutting || isSheetSale || isBending
+      const area = isOnlyCutting || isSheetSale || isBending || isBendOnly
         ? '—'
         : Number(frame.area || (isFancy ? frame.width : 0) || 0).toFixed(2)
       const rate = isBendOnly
@@ -1633,19 +1641,31 @@ export async function shareBillAsImage(bill, filename = `habib-bill-${bill?.sr_n
   addText('usamarehman067@gmail.com', { font: '8px Arial, sans-serif', align: 'center', gap: 2 })
   addText('*** Thank You ***', { font: 'bold 10px Arial, sans-serif', align: 'center', gap: 3 })
   addText('Shop Location', { font: '8px Arial, sans-serif', align: 'center', gap: 2 })
-  addImage(location, contentWidth, 170)
+  addImage(location, 280, 190, location.naturalHeight * 0.83, 1.2)
 
+  const outputScale = 3
   const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = Math.ceil(y + 10)
+  canvas.width = width * outputScale
+  canvas.height = Math.ceil((y + 10) * outputScale)
   const context = canvas.getContext('2d')
   if (!context) throw new Error('Could not create bill image')
+  context.scale(outputScale, outputScale)
   context.fillStyle = '#fff'
   context.fillRect(0, 0, canvas.width, canvas.height)
   context.textBaseline = 'top'
   for (const operation of operations) {
     if (operation.type === 'image') {
-      context.drawImage(operation.image, operation.x, operation.y, operation.width, operation.height)
+      context.drawImage(
+        operation.image,
+        0,
+        0,
+        operation.image.naturalWidth,
+        operation.sourceHeight,
+        operation.x,
+        operation.y,
+        operation.width,
+        operation.height
+      )
       continue
     }
     if (operation.type === 'divider') {

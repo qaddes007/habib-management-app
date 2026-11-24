@@ -627,10 +627,18 @@ function frameFromApi(f) {
   const cncGauge = normalizeGaugeString(
     f.bill_category === 'cnc_only' ? f.gauge || f.cnc_gauge : f.cnc_gauge || f.gauge
   )
+  const savedMaterial = f.material || f.cnc_material || 'MS-CNC'
+  const isPresetMaterial = [...MAT_LIST, ...CNC_PIPE_MATERIALS].includes(savedMaterial)
+  const customMaterial = isPresetMaterial
+    ? ''
+    : savedMaterial === '+ Write Own'
+      ? (f.cnc_material && f.cnc_material !== '+ Write Own' ? f.cnc_material : '')
+      : savedMaterial
   return {
     _id: nextId++,
     bill_category: f.bill_category || 'cnc_only',
-    material: f.material || f.cnc_material || 'MS-CNC',
+    material: isPresetMaterial ? savedMaterial : '+ Write Own',
+    custom_material: customMaterial,
     gauge: normalizeGaugeString(f.gauge || f.cnc_gauge || '12 Gauge'),
     pipe_gauge: normalizeGaugeString(f.pipe_gauge || '12 Gauge'),
     cnc_gauge: cncGauge,
@@ -732,8 +740,7 @@ export default function NewBill({ toast }) {
   }
 
   const getWeightEstimate = (frame) => {
-    if (frame.bill_category === 'bending_only') return Number(frame.bend_count) || 0
-    if (['bending_sheet', 'only_cutting'].includes(frame.bill_category)) return 0
+    if (['bending_only', 'bending_sheet', 'only_cutting'].includes(frame.bill_category)) return 0
     const material = frame.material || 'MS-CNC'
     const gauge = normalizeGaugeString(getStockGauge(frame))
     const size = frame.sheet_size || '4x8'
@@ -757,7 +764,7 @@ export default function NewBill({ toast }) {
   }
 
   const getStockAvailability = (frame) => {
-    if (['bending_sheet', 'only_cutting'].includes(frame.bill_category)) return null
+    if (['bending_only', 'bending_sheet', 'only_cutting'].includes(frame.bill_category)) return null
     const material = frame.material === '+ Write Own' ? frame.custom_material : (frame.material || 'MS-CNC')
     const gauge = normalizeGaugeString(getStockGauge(frame))
     const size = frame.sheet_size || '4x8'
@@ -773,7 +780,7 @@ export default function NewBill({ toast }) {
       .reduce((sum, entry) => sum + (Number(entry.quantity) || 0), 0)
     const usedByCurrentBill = frames
       .filter(item => String((item.material === '+ Write Own' ? item.custom_material : item.material) || '').trim() === String(material).trim())
-      .filter(item => !['bending_sheet', 'only_cutting'].includes(item.bill_category))
+      .filter(item => !['bending_only', 'bending_sheet', 'only_cutting'].includes(item.bill_category))
       .filter(item => normalizeGaugeString(getStockGauge(item)) === gauge)
       .filter(item => String(item.sheet_size || '4x8') === String(size))
       .reduce((sum, item) => sum + (item.bill_category === 'sheet_sale'
@@ -802,6 +809,10 @@ export default function NewBill({ toast }) {
 
   const save = async () => {
     if (!clientName.trim()) { toast('Client name is required', true); return }
+    if (frames.some(frame => frame.material === '+ Write Own' && !frame.custom_material?.trim())) {
+      toast('Enter a custom material name for each Write Own item', true)
+      return
+    }
     setSaving(true)
     try {
       const payload = {
@@ -818,10 +829,11 @@ export default function NewBill({ toast }) {
           const cncGauge = normalizeGaugeString(
             f.bill_category === 'cnc_only' ? f.gauge || f.cnc_gauge : f.cnc_gauge || f.gauge
           )
+          const material = f.material === '+ Write Own' ? f.custom_material.trim() : f.material
           return {
             bill_category: f.bill_category,
-            material: f.material === '+ Write Own' ? (f.custom_material || 'CUSTOM') : f.material,
-            cnc_material: f.material,
+            material,
+            cnc_material: material,
             gauge: f.bill_category === 'cnc_only' ? cncGauge : normalizeGaugeString(f.gauge),
             cnc_gauge: cncGauge,
             pipe_gauge: normalizeGaugeString(f.pipe_gauge),

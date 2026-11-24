@@ -37,7 +37,7 @@ try {
                            END) as total_area, COUNT(*) as item_count
                     FROM bill_frames bf
                     JOIN bills b ON b.id = bf.bill_id
-                    WHERE bf.bill_category IN ('cnc_only','cnc_pipe','bending_sheet','bending_only','sheet_sale','only_cutting')
+                    WHERE bf.bill_category IN ('cnc_only','cnc_pipe','sheet_sale')
                     GROUP BY bf.material, bf.cnc_material, bf.gauge, bf.cnc_gauge, bf.sheet_size
                 ");
                 jsonResponse(['success' => true, 'usage' => $stmt->fetchAll()]);

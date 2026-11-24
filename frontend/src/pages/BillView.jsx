@@ -91,7 +91,7 @@ export default function BillView({ toast }) {
     GP: 35,
   }
   const totalWeight = frames.reduce((sum, f) => {
-    if (f.bill_category === 'bending_only') return sum + (Number(f.bend_count) || 0)
+    if (['bending_only', 'bending_sheet', 'only_cutting'].includes(f.bill_category)) return sum
     const material = (f.material || f.cnc_material || 'MS-CNC').toString().trim()
     const baseKg = defaultKgMap[material] || 40
     const area = Number(f.area) || 0
@@ -141,7 +141,7 @@ export default function BillView({ toast }) {
           <img
             src="/logo.png.jpeg"
             alt="S. Habib logo"
-            style={{ display: 'block', width: 84, height: 84, objectFit: 'contain', margin: '0 auto 8px', border: 0, boxShadow: 'none' }}
+            style={{ display: 'block', width: 100, height: 100, objectFit: 'contain', margin: '0 auto 8px', border: 0, boxShadow: 'none' }}
             onError={e => { e.target.style.display = 'none' }}
           />
           <h2 style={{ color: 'var(--text-orange)', margin: 0 }}>{company.name || 'S. HABIB STEEL & LASER CRAFT'}</h2>
@@ -207,7 +207,16 @@ export default function BillView({ toast }) {
                   </td>
                   <td>{isBendOnly ? `${Number(f.bend_count || 0).toFixed(2)} Kg` : isFancy ? `${Number(f.area || f.width || 0).toFixed(2)} sqft` : isOnlyCutting ? f.pcs : isSheetSale ? `${f.pcs} sheets` : f.pcs}</td>
                   <td>{isFancy ? `${Number(f.rate || 0).toFixed(2)} / sqft` : isBendOnly ? `${Number(f.bend_rate || 0).toFixed(2)} / Kg` : isBending ? `${Number(f.bend_rate || 0).toFixed(2)} / bend` : isSheetSale ? `${Number(f.direct_price || 0).toFixed(2)} / sheet` : isOnlyCutting ? '—' : Number(f.rate || 0).toFixed(2)}</td>
-                  <td>{isOnlyCutting || isSheetSale || isBending ? '—' : `${Number(f.area || (isFancy ? f.width : 0) || 0).toFixed(2)} sqft`}</td>
+                  <td>
+                    {isOnlyCutting || isSheetSale || isBending
+                      ? '—'
+                      : isBendOnly
+                        ? <>
+                            <span className="no-print">{Number(f.area || 0).toFixed(2)} sqft</span>
+                            <span className="print-only">—</span>
+                          </>
+                        : `${Number(f.area || (isFancy ? f.width : 0) || 0).toFixed(2)} sqft`}
+                  </td>
                   <td>
                     {bendTotal > 0
                       ? <span title={`${bendCount} × ${bendRate}`}>{Number(bendTotal).toFixed(2)}</span>
