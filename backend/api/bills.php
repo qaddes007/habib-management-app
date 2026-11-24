@@ -14,7 +14,7 @@ $db = getDB();
 function bendingSheetArea(PDO $db, string $material, string $gauge, string $sheetSize, float $kgSold): float {
     if (!preg_match('/^(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)$/i', $sheetSize, $matches)) return 0.0;
     $sheetArea = (float)$matches[1] * (float)$matches[2];
-    $stmt = $db->prepare('SELECT kg_per_sheet FROM sheet_stock WHERE material=? AND gauge=? AND sheet_size=? LIMIT 1');
+    $stmt = $db->prepare('SELECT kg_per_sheet FROM sheet_stock WHERE UPPER(TRIM(material))=UPPER(TRIM(?)) AND LOWER(TRIM(gauge))=LOWER(TRIM(?)) AND LOWER(TRIM(sheet_size))=LOWER(TRIM(?)) LIMIT 1');
     $stmt->execute([$material, $gauge, $sheetSize]);
     $kgPerSheet = (float)$stmt->fetchColumn();
     return $kgPerSheet > 0 ? ($kgSold / $kgPerSheet) * $sheetArea : 0.0;
@@ -416,15 +416,8 @@ function normalizeSheetMaterial(string $mat): ?string {
     // Pure sheet materials (canonical names + legacy aliases)
     $bases = ['MS-CNC', 'SS-CNC', 'SG-CNC', 'GP', 'MS-BLACK', 'SS-SILVER', 'SS-GOLDEN'];
     foreach ($bases as $base) {
-        if (strcasecmp($mat, $base) === 0) {
+        if (strcasecmp($mat, $base) === 0 || preg_match('/(?:^|[-)])' . preg_quote($base, '/') . '$/i', $mat)) {
             // Normalize legacy names → new names for stock match
-            if (strcasecmp($base, 'MS-BLACK') === 0) return 'MS-CNC';
-            if (strcasecmp($base, 'SS-SILVER') === 0) return 'SS-CNC';
-            if (strcasecmp($base, 'SS-GOLDEN') === 0) return 'SG-CNC';
-            return $base;
-        }
-        // e.g. MS(Pipe)-MS-CNC or SS(Pipe)-SS-CNC
-        if (preg_match('/' . preg_quote($base, '/') . '$/i', $mat)) {
             if (strcasecmp($base, 'MS-BLACK') === 0) return 'MS-CNC';
             if (strcasecmp($base, 'SS-SILVER') === 0) return 'SS-CNC';
             if (strcasecmp($base, 'SS-GOLDEN') === 0) return 'SG-CNC';
@@ -456,7 +449,9 @@ function consumeStockForBill(PDO $db, int $billId): void {
 
     foreach ($frames as $f) {
         $isSheetSale = $f['bill_category'] === 'sheet_sale';
-        $raw = $isSheetSale ? $f['material'] : ($f['cnc_material'] ?: $f['material']);
+        $raw = $f['bill_category'] === 'cnc_pipe'
+            ? ($f['cnc_material'] ?: $f['material'])
+            : ($f['material'] ?: $f['cnc_material']);
         $mat = normalizeSheetMaterial((string)$raw);
         if (!$mat) continue; // skip pipe-only / unknown
 
@@ -479,8 +474,8 @@ function consumeStockForBill(PDO $db, int $billId): void {
         if ($sheetsNeeded <= 0) continue;
 
         $gaugeNum = preg_replace('/[^0-9]/', '', (string)$gauge);
-        $s = $db->prepare('SELECT * FROM sheet_stock WHERE material=? AND sheet_size=? AND (gauge=? OR gauge=?)');
-        $s->execute([$mat, $size, $gauge, $gaugeNum . ' Gauge']);
+        $s = $db->prepare('SELECT * FROM sheet_stock WHERE UPPER(TRIM(material))=UPPER(?) AND sheet_size=? AND (LOWER(TRIM(gauge))=LOWER(?) OR LOWER(TRIM(gauge))=LOWER(?) OR TRIM(gauge)=?)');
+        $s->execute([$mat, $size, $gauge, $gaugeNum . ' Gauge', $gaugeNum]);
         $stock = $s->fetch();
 
         if ($stock) {

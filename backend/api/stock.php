@@ -27,9 +27,6 @@ try {
                 $stmt = $db->query("
                     SELECT bf.material, bf.cnc_material, bf.gauge, bf.cnc_gauge, bf.sheet_size,
                            SUM(CASE
-                               WHEN bf.bill_category IN ('bending_sheet','only_cutting')
-                                   THEN CAST(SUBSTRING_INDEX(LOWER(bf.sheet_size), 'x', 1) AS DECIMAL(10,2))
-                                       * CAST(SUBSTRING_INDEX(LOWER(bf.sheet_size), 'x', -1) AS DECIMAL(10,2))
                                WHEN bf.bill_category = 'sheet_sale'
                                    THEN CAST(SUBSTRING_INDEX(LOWER(bf.sheet_size), 'x', 1) AS DECIMAL(10,2))
                                        * CAST(SUBSTRING_INDEX(LOWER(bf.sheet_size), 'x', -1) AS DECIMAL(10,2)) * bf.pcs

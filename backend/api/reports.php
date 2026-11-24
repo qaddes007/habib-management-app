@@ -153,7 +153,11 @@ try {
     $agg = [];
     $usageDetail = [];
     foreach ($rawFrames as $row) {
-        $rawMat = trim($row['cnc_material'] ?: $row['material'] ?: '');
+        $category = $row['bill_category'] ?? '';
+        $rawMaterial = $category === 'cnc_pipe'
+            ? ($row['cnc_material'] ?: $row['material'])
+            : ($row['material'] ?: $row['cnc_material']);
+        $rawMat = trim($rawMaterial ?: '');
         if ($rawMat === '') $rawMat = '(no material)';
         $base = $rawMat;
         // normalize known sheet bases from composites + legacy names
@@ -179,7 +183,7 @@ try {
         $size = $row['sheet_size'] ?: '';
         $pcs = max(1, (int)$row['pcs']);
         $lineTotal = (float)($row['total'] ?? 0);
-        $cat = $row['bill_category'] ?? '';
+        $cat = $category;
         $area = (float)$row['area'];
         if (in_array($cat, ['bending_sheet', 'only_cutting'], true)) {
             if (preg_match('/^(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)$/i', $size, $matches)) {

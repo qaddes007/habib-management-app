@@ -97,12 +97,23 @@ function getSheetArea(size) {
   return dimensions ? Number(dimensions[1]) * Number(dimensions[2]) : 0
 }
 
+function normalizeStockMaterial(value) {
+  const material = String(value || '').trim().toUpperCase()
+  const aliases = {
+    'MS-BLACK': 'MS-CNC',
+    'SS-SILVER': 'SS-CNC',
+    'SS-GOLDEN': 'SG-CNC',
+  }
+  const canonical = material.match(/(?:^|[-)])(MS-CNC|SS-CNC|SG-CNC|GP|MS-BLACK|SS-SILVER|SS-GOLDEN)$/)?.[1] || material
+  return aliases[canonical] || canonical
+}
+
 function getBendingArea(frame, stockRows) {
   const material = frame.material === '+ Write Own' ? frame.custom_material : frame.material
   const gauge = normalizeGaugeString(frame.gauge || '12 Gauge')
   const size = frame.sheet_size || '4x8'
   const stock = stockRows.find(entry =>
-    String(entry.material || '').trim() === String(material || '').trim() &&
+    normalizeStockMaterial(entry.material) === normalizeStockMaterial(material) &&
     normalizeGaugeString(entry.gauge || '12 Gauge') === gauge &&
     String(entry.sheet_size || '4x8') === size
   )
@@ -112,15 +123,14 @@ function getBendingArea(frame, stockRows) {
 }
 
 function isPresetGauge(value, list) {
-  const norm = normalizeGaugeString(value)
-  if (!norm) return true
-  return list.some(g => norm === g + ' Gauge' || norm === String(g))
+  const gauge = String(value ?? '').trim().replace(/\s*Gauge\s*$/i, '').trim()
+  return gauge !== '' && list.some(item => gauge === String(item))
 }
 
 function GaugeSelect({ value, list, onChange }) {
-  const safeValue = normalizeGaugeString(value)
-  const preset = isPresetGauge(safeValue, list)
-  const selectVal = preset ? (safeValue || (list[0] + ' Gauge')) : '+ Write Own'
+  const gauge = String(value ?? '').trim().replace(/\s*Gauge\s*$/i, '').trim()
+  const preset = isPresetGauge(gauge, list)
+  const selectVal = preset ? `${gauge} Gauge` : '+ Write Own'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <select value={selectVal} onChange={e => {
@@ -135,7 +145,7 @@ function GaugeSelect({ value, list, onChange }) {
       {!preset && (
         <input
           value={value || ''}
-          onChange={e => onChange(normalizeGaugeString(e.target.value))}
+          onChange={e => onChange(e.target.value)}
           placeholder="Type gauge e.g. 11 Gauge"
         />
       )}
@@ -749,14 +759,14 @@ export default function NewBill({ toast }) {
     const sheetArea = getSheetArea(size) || 32
     const qtySheets = area / sheetArea
     const matching = stockRows.find(entry =>
-      String(entry.material || '').trim() === String(material).trim() &&
+      normalizeStockMaterial(entry.material) === normalizeStockMaterial(material) &&
       normalizeGaugeString(entry.gauge || '12 Gauge') === gauge &&
       String(entry.sheet_size || '4x8') === String(size)
     ) || stockRows.find(entry =>
-      String(entry.material || '').trim() === String(material).trim() &&
+      normalizeStockMaterial(entry.material) === normalizeStockMaterial(material) &&
       normalizeGaugeString(entry.gauge || '12 Gauge') === gauge
     ) || stockRows.find(entry =>
-      String(entry.material || '').trim() === String(material).trim() &&
+      normalizeStockMaterial(entry.material) === normalizeStockMaterial(material) &&
       String(entry.sheet_size || '4x8') === String(size)
     ) || { kg_per_sheet: 0 }
     const kgPerSheet = Number(matching.kg_per_sheet) || 0
@@ -774,12 +784,12 @@ export default function NewBill({ toast }) {
       ? Math.max(0, Number(frame.pcs) || 0)
       : (area > 0 ? area / sheetArea : 0)
     const currentQty = stockRows
-      .filter(entry => String(entry.material || '').trim() === String(material).trim())
+      .filter(entry => normalizeStockMaterial(entry.material) === normalizeStockMaterial(material))
       .filter(entry => normalizeGaugeString(entry.gauge || '12 Gauge') === gauge)
       .filter(entry => String(entry.sheet_size || '4x8') === String(size))
       .reduce((sum, entry) => sum + (Number(entry.quantity) || 0), 0)
     const usedByCurrentBill = frames
-      .filter(item => String((item.material === '+ Write Own' ? item.custom_material : item.material) || '').trim() === String(material).trim())
+      .filter(item => normalizeStockMaterial(item.material === '+ Write Own' ? item.custom_material : item.material) === normalizeStockMaterial(material))
       .filter(item => !['bending_only', 'bending_sheet', 'only_cutting'].includes(item.bill_category))
       .filter(item => normalizeGaugeString(getStockGauge(item)) === gauge)
       .filter(item => String(item.sheet_size || '4x8') === String(size))
@@ -811,6 +821,17 @@ export default function NewBill({ toast }) {
     if (!clientName.trim()) { toast('Client name is required', true); return }
     if (frames.some(frame => frame.material === '+ Write Own' && !frame.custom_material?.trim())) {
       toast('Enter a custom material name for each Write Own item', true)
+      return
+    }
+    if (frames.some(frame => {
+      const gauge = frame.bill_category === 'pipe_grill'
+        ? frame.pipe_gauge
+        : frame.bill_category === 'cnc_pipe'
+          ? frame.cnc_gauge || frame.gauge
+          : frame.gauge
+      return !String(gauge ?? '').trim()
+    })) {
+      toast('Enter a custom gauge for each Write Own gauge selection', true)
       return
     }
     setSaving(true)
