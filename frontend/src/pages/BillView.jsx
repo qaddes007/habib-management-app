@@ -1,0 +1,305 @@
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { api, fmt, CAT_LABELS, getFrameGaugeLabel, shareBillAsImage } from '../api/client'
+import ThermalPrint from '../components/ThermalPrint'
+import { useAutoRefresh } from '../hooks/useLiveSync'
+
+function normalizeGaugeText(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw || raw === '0') return '12 Gauge'
+  const compact = raw.replace(/\s+/g, ' ').replace(/\s*Gauge\s*$/i, '').trim()
+  if (!compact || compact === '0') return '12 Gauge'
+  return /^\d+(?:\.\d+)?$/i.test(compact) ? `${compact} Gauge` : raw.trim()
+}
+
+function formatBoolText(value) {
+  if (value === true || value === 1 || value === '1') return 'Yes'
+  if (value === false || value === 0 || value === '0' || value === null || value === undefined || value === '') return ''
+  return String(value)
+}
+
+function StatusBadge({ status }) {
+  const display = status === 'PAID' ? 'PAID' : 'UNPAID'
+  const cls = status === 'PAID' ? 'badge-paid' : 'badge-unpaid'
+  return <span className={`badge ${cls}`}>{display}</span>
+}
+
+function isBillLocked(bill) {
+  if (!bill || bill.payment_status !== 'PAID') return false
+  const created = new Date(String(bill.created_at).replace(' ', 'T'))
+  return (Date.now() - created.getTime()) > 30 * 24 * 60 * 60 * 1000
+}
+
+export default function BillView({ toast }) {
+  const navigate = useNavigate()
+
+  const { id } = useParams()
+  const billRequest = useRef(0)
+  const [bill, setBill] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [showPay, setShowPay] = useState(false)
+  const [payAmount, setPayAmount] = useState('')
+  const [payNote, setPayNote] = useState('Payment')
+  const [showThermal, setShowThermal] = useState(false)
+
+  const load = useCallback(() => {
+    const requestId = ++billRequest.current
+    setLoading(true)
+    api.getBill(id)
+      .then(d => {
+        if (requestId !== billRequest.current) return
+        setBill(d.data)
+        setPayAmount(d.data?.remaining_balance || '')
+      })
+      .catch(e => { if (requestId === billRequest.current) toast(e.message, true) })
+      .finally(() => { if (requestId === billRequest.current) setLoading(false) })
+  }, [id])
+
+  useEffect(() => { load() }, [load])
+  useAutoRefresh(load)
+
+  const submitPayment = async () => {
+    const amount = parseFloat(payAmount) || 0
+    if (amount <= 0) { toast('Enter a valid amount', true); return }
+    try {
+      const result = await api.addPayment({ bill_id: Number(bill.id), amount, note: payNote })
+      toast(result.pending ? 'Payment saved on this laptop; it will sync later.' : 'Payment recorded')
+      setShowPay(false)
+      load()
+    } catch (e) {
+      toast(e.message, true)
+    }
+  }
+
+  if (loading) return <div className="loading">Loading bill…</div>
+  if (!bill) return (
+    <div className="container">
+      <div className="card empty-state">
+        <p>Bill not found.</p>
+        <Link to="/bills" className="btn btn-primary mt-2">Back to Bills</Link>
+      </div>
+    </div>
+  )
+
+  const frames = bill.frames || []
+  const payments = bill.payment_history || []
+  const company = bill.company || {}
+  const defaultKgMap = {
+    'MS-CNC': 42,
+    'SS-CNC': 40,
+    'SG-CNC': 40,
+    GP: 35,
+  }
+  const totalWeight = frames.reduce((sum, f) => {
+    if (f.bill_category === 'bending_only') return sum + (Number(f.bend_count) || 0)
+    const material = (f.material || f.cnc_material || 'MS-CNC').toString().trim()
+    const baseKg = defaultKgMap[material] || 40
+    const area = Number(f.area) || 0
+    const pcs = Number(f.pcs) || 1
+    const width = Number(f.width) || 0
+    const length = Number(f.length) || 0
+    const calcArea = area > 0 ? area : width * length * pcs
+    return sum + (calcArea > 0 ? calcArea / 32 * baseKg : 0)
+  }, 0)
+
+  return (
+    <div className="container">
+      <div className="page-title no-print">
+        <span>Bill #{bill.sr_no} — {bill.client_name}</span>
+        <div className="btn-group">
+          <button className="btn btn-blue" onClick={() => window.print()}>🖨️ Print</button>
+          {!isBillLocked(bill) ? (
+            <button className="btn btn-orange" onClick={() => navigate('/edit-bill/' + bill.id)}>✏️ Edit</button>
+          ) : (
+            <span className="badge badge-unpaid" title="PAID bills older than 30 days cannot be edited">🔒 Locked</span>
+          )}
+          <button className="btn btn-purple" onClick={() => setShowThermal(true)}>🧾 80mm Print</button>
+          <button className="btn btn-wa"
+            onClick={async () => {
+              try {
+                const result = await shareBillAsImage(bill, 'habib-bill-' + bill.sr_no + '.png')
+                if (result.downloaded) toast('80mm bill image downloaded. Attach the PNG in WhatsApp.')
+              } catch (e) {
+                toast(e.message, true)
+              }
+            }}>📲 WA Business</button>
+          <button className="btn btn-green" onClick={() => setShowPay(true)}>💰 Add Payment</button>
+          <Link to="/bills" className="btn btn-ghost">← Back</Link>
+        </div>
+      </div>
+
+      {(bill.pending || bill.pending_changes) && (
+        <div className="offline-notice" role="status">
+          {bill.pending
+            ? 'This bill is saved only on this laptop. Its final bill number will be assigned after syncing.'
+            : 'Changes to this bill are saved on this laptop and are waiting to sync.'}
+        </div>
+      )}
+
+      <div className="card" id="printArea">
+        <div style={{ textAlign: 'center', borderBottom: '2px solid var(--text-orange)', paddingBottom: 12, marginBottom: 16 }}>
+          <img
+            src="/logo.png.jpeg"
+            alt="S. Habib logo"
+            style={{ display: 'block', width: 84, height: 84, objectFit: 'contain', margin: '0 auto 8px', border: 0, boxShadow: 'none' }}
+            onError={e => { e.target.style.display = 'none' }}
+          />
+          <h2 style={{ color: 'var(--text-orange)', margin: 0 }}>{company.name || 'S. HABIB STEEL & LASER CRAFT'}</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0' }}>
+            {company.tagline || ''}
+          </p>
+          <p style={{ fontSize: '0.8rem' }}>
+            {[company.address, company.phones].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+
+        <div className="form-grid" style={{ marginBottom: 16 }}>
+          <div><strong>Bill No:</strong> #{bill.sr_no}</div>
+          <div><strong>Date:</strong> {bill.created_at?.slice(0, 16)}</div>
+          <div><strong>Client:</strong> {bill.client_name}</div>
+          <div><strong>Phone:</strong> {bill.client_phone || '—'}</div>
+          <div><strong>Status:</strong> <StatusBadge status={bill.payment_status} /></div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Category</th><th>Material / Gauge</th><th>Size (W×L)</th>
+              <th>Pcs</th><th>Rate</th><th>Area</th><th>Bending</th><th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {frames.map((f, i) => {
+              const tags = typeof f.tags === 'string' ? JSON.parse(f.tags || '[]') : (f.tags || [])
+              const bendRate = parseFloat(f.bend_rate) || 0
+              const bendCount = parseFloat(f.bend_count) || 0
+              const bendTotal = ['bending_sheet', 'bending_only'].includes(f.bill_category)
+                ? bendRate * bendCount
+                : 0
+              const isFancy = f.bill_category === 'fancy'
+              const isBendOnly = f.bill_category === 'bending_only'
+              const isBending = f.bill_category === 'bending_sheet'
+              const isSheetSale = f.bill_category === 'sheet_sale'
+              const isOnlyCutting = f.bill_category === 'only_cutting'
+              return (
+                <tr key={f.id || i}>
+                  <td>{i + 1}</td>
+                  <td>{CAT_LABELS[f.bill_category] || f.bill_category || '—'}</td>
+                  <td>
+                    {f.material || f.cnc_material || (isBendOnly ? 'Bending only' : '—')}
+                    {getFrameGaugeLabel(f) ? ` / ${normalizeGaugeText(getFrameGaugeLabel(f))}` : ''}
+                    {isBendOnly && <><br /><small>{Number(f.bend_count || 0).toFixed(2)} Kg sold</small></>}
+                    {tags.length > 0 && <><br /><small className="text-muted">{tags.join(', ')}</small></>}
+                    {f.bill_category === 'cnc_pipe' && (f.color_yes || f.color_no || f.fitting_yes || f.fitting_no) && (
+                      <><br /><small className="text-muted">
+                        {f.color_yes || f.color_no ? `Color: ${f.color_yes ? 'Yes ✓' : 'No'}` : ''}
+                        {f.fitting_yes || f.fitting_no ? ` · Fitting: ${f.fitting_yes ? 'Yes ✓' : 'No'}` : ''}
+                      </small></>
+                    )}
+                    {f.extra_item_name && <><br /><small>+ {f.extra_item_name}{f.extra_item_price ? ` (${Number(f.extra_item_price).toFixed(2)})` : ''}</small></>}
+                  </td>
+                  <td>
+                    {isFancy
+                      ? `${Number(f.area || f.width || 0).toFixed(2)} sqft`
+                      : isBending
+                        ? '—'
+                        : (isBendOnly || isSheetSale || isOnlyCutting)
+                        ? `${f.sheet_size || '4x8'} sheet`
+                        : `${Number(f.width || 0).toFixed(2)} × ${Number(f.length || 0).toFixed(2)} ft`}
+                  </td>
+                  <td>{isBendOnly ? `${Number(f.bend_count || 0).toFixed(2)} Kg` : isFancy ? `${Number(f.area || f.width || 0).toFixed(2)} sqft` : isOnlyCutting ? f.pcs : isSheetSale ? `${f.pcs} sheets` : f.pcs}</td>
+                  <td>{isFancy ? `${Number(f.rate || 0).toFixed(2)} / sqft` : isBendOnly ? `${Number(f.bend_rate || 0).toFixed(2)} / Kg` : isBending ? `${Number(f.bend_rate || 0).toFixed(2)} / bend` : isSheetSale ? `${Number(f.direct_price || 0).toFixed(2)} / sheet` : isOnlyCutting ? '—' : Number(f.rate || 0).toFixed(2)}</td>
+                  <td>{isOnlyCutting || isSheetSale || isBending ? '—' : `${Number(f.area || (isFancy ? f.width : 0) || 0).toFixed(2)} sqft`}</td>
+                  <td>
+                    {bendTotal > 0
+                      ? <span title={`${bendCount} × ${bendRate}`}>{Number(bendTotal).toFixed(2)}</span>
+                      : '—'}
+                  </td>
+                  <td><strong>{Number(f.total).toFixed(2)}</strong></td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+
+        {(() => {
+          const billBendTotal = frames.reduce((s, f) => {
+            if (!['bending_sheet', 'bending_only'].includes(f.bill_category)) return s
+            const br = parseFloat(f.bend_rate) || 0
+            const bc = parseFloat(f.bend_count) || 0
+            return s + br * bc
+          }, 0)
+          return (
+            <div className="grand-bar" style={{ marginTop: 20 }}>
+              <div className="gt-item"><div className="gt-label">Grand Total</div><div className="gt-value">{fmt(bill.grand_total)}</div></div>
+              <div className="gt-item"><div className="gt-label">Weight</div><div className="gt-value" style={{ color: '#7c3aed' }}>{totalWeight.toFixed(2)} Kg</div></div>
+              {billBendTotal > 0 && (
+                <div className="gt-item">
+                  <div className="gt-label">Bending Total</div>
+                  <div className="gt-value" style={{ color: 'var(--text-orange)' }}>{fmt(billBendTotal)}</div>
+                </div>
+              )}
+              <div className="gt-item"><div className="gt-label">Discount</div><div className="gt-value">{fmt(bill.discount)}</div></div>
+              <div className="gt-item"><div className="gt-label">Net Total</div><div className="gt-value">{fmt(bill.net_total)}</div></div>
+              <div className="gt-item"><div className="gt-label">Paid</div><div className="gt-value green">{fmt(bill.paid_amount)}</div></div>
+              <div className="gt-item"><div className="gt-label">Remaining</div><div className="gt-value red">{fmt(bill.remaining_balance)}</div></div>
+            </div>
+          )
+        })()}
+
+        {(company.pay_bank || company.pay_account_name || company.pay_account_1_display) && (
+          <div style={{ marginTop: 18, padding: 12, background: 'var(--card-inner)', borderRadius: 8, fontSize: '0.85rem' }}>
+            {company.pay_label && <><strong>{company.pay_label}:</strong>{' '}</>}
+            {company.pay_bank && <>{company.pay_bank}<br /></>}
+            {company.pay_account_name && <>Account: {company.pay_account_name}<br /></>}
+            {company.pay_account_1_display && <>Account / IBAN: {company.pay_account_1_display}</>}
+          </div>
+        )}
+        <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          Developed by: ENGR. Usama Rehman · usamarehman067@gmail.com
+        </p>
+      </div>
+
+      <div className="card no-print mt-2">
+        <div className="card-header"><h3>Payment History</h3></div>
+        <table>
+          <thead><tr><th>Date</th><th>Amount</th><th>Note</th></tr></thead>
+          <tbody>
+            {payments.length === 0 && <tr><td colSpan={3} className="text-muted">No payments yet</td></tr>}
+            {payments.map(p => (
+              <tr key={p.id}>
+                <td>{p.paid_at}</td>
+                <td>{fmt(p.amount)}</td>
+                <td>{p.note || ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {showThermal && (
+        <ThermalPrint bill={bill} onClose={() => setShowThermal(false)} />
+      )}
+
+      {showPay && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowPay(false)}>
+          <div className="modal">
+            <h2>Add Payment — Bill #{bill.sr_no}</h2>
+            <div className="form-group mb-1">
+              <label>Amount (PKR)</label>
+              <input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)} min="0.01" step="0.01" />
+            </div>
+            <div className="form-group mb-1">
+              <label>Note</label>
+              <input value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="e.g. Cash, Bank transfer" />
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setShowPay(false)}>Cancel</button>
+              <button className="btn btn-green" onClick={submitPayment}>Save Payment</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

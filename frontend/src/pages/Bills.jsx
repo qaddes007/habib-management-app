@@ -1,0 +1,161 @@
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
+import { api, fmt, shareBillAsImage } from '../api/client'
+import PrintSelector from '../components/PrintSelector'
+import ThermalPrint from '../components/ThermalPrint'
+import { useAutoRefresh } from '../hooks/useLiveSync'
+
+function StatusBadge({ status }) {
+  const display = status === 'PAID' ? 'PAID' : 'UNPAID'
+  const cls = status === 'PAID' ? 'badge-paid' : 'badge-unpaid'
+  return <span className={`badge ${cls}`}>{display}</span>
+}
+
+export default function Bills({ toast }) {
+  const [bills, setBills] = useState([])
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [showPrintSel, setShowPrintSel] = useState(false)
+  const [thermalBill, setThermalBill] = useState(null)
+  const thermalRequest = useRef(0)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.listBills({ search, status, limit: 100 })
+      .then(d => setBills(d.data || []))
+      .catch(e => toast(e.message, true))
+      .finally(() => setLoading(false))
+  }, [search, status])
+
+  useEffect(() => { load() }, [load])
+  useAutoRefresh(load)
+
+  const del = async (id, sr) => {
+    if (!confirm(`Delete Bill #${sr}? This cannot be undone.`)) return
+    try {
+      const result = await api.deleteBill(id)
+      toast(result.pending ? 'Bill deletion saved on this laptop; it will sync later.' : 'Bill deleted')
+      load()
+    } catch (e) {
+      toast(e.message, true)
+    }
+  }
+
+  const openThermal = async (id) => {
+    const requestId = ++thermalRequest.current
+    setThermalBill(null)
+    try {
+      const d = await api.getBill(id)
+      if (requestId === thermalRequest.current) setThermalBill(d.data)
+    } catch (e) {
+      if (requestId !== thermalRequest.current) return
+      const cachedSummary = bills.find(bill => Number(bill.id) === Number(id))
+      if (cachedSummary) {
+        setThermalBill({
+          ...cachedSummary,
+          frames: [],
+          payment_history: [],
+          personal_expenses: [],
+          company: {},
+          offline_summary: true,
+        })
+        toast('Offline: only the saved bill summary is available; item details were not cached.', true)
+      } else {
+        toast(e.message, true)
+      }
+    }
+  }
+
+  const shareBillWA = async (id) => {
+    try {
+      const d = await api.getBill(id)
+      const sr = d.data?.sr_no || id
+      const result = await shareBillAsImage(d.data, 'habib-bill-' + sr + '.png')
+      if (result.downloaded) toast('80mm bill image downloaded. Attach the PNG in WhatsApp.')
+    } catch (e) {
+      toast(e.message, true)
+    }
+  }
+
+  return (
+    <div className="container">
+      <div className="page-title">
+        <span>📋 All Bills</span>
+        <div className="btn-group">
+          <button className="btn btn-orange" onClick={() => setShowPrintSel(true)}>🖨️ Print Bill</button>
+          <Link to="/new-bill" className="btn btn-primary">➕ New Bill</Link>
+        </div>
+      </div>
+
+      <div className="card mb-2">
+        <div className="form-grid" style={{ alignItems: 'end' }}>
+          <div className="form-group">
+            <label>Search</label>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Name, phone, SR#..." />
+          </div>
+          <div className="form-group">
+            <label>Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)}>
+              <option value="">All</option>
+              <option value="PAID">Paid</option>
+              <option value="PARTIAL">Partial</option>
+              <option value="UNPAID">Unpaid</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SR#</th><th>Client</th><th>Phone</th><th>Grand Total</th><th>Net Total</th>
+                <th>Paid</th><th>Remaining</th><th>Status</th><th>Date</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && <tr><td colSpan={10} className="loading">Loading…</td></tr>}
+              {!loading && bills.length === 0 && (
+                <tr><td colSpan={10} className="empty-state">No bills found</td></tr>
+              )}
+              {bills.map(b => (
+                <tr key={b.id}>
+                  <td>
+                    <strong>{b.pending ? 'PENDING' : `#${b.sr_no}`}</strong>
+                    {b.pending_changes && <span className="badge badge-unpaid" style={{ marginLeft: 8 }}>Pending sync</span>}
+                  </td>
+                  <td>{b.client_name}</td>
+                  <td>{b.client_phone || '—'}</td>
+                  <td>{fmt(b.grand_total)}</td>
+                  <td>{fmt(b.net_total)}</td>
+                  <td>{fmt(b.paid_amount)}</td>
+                  <td>{fmt(b.remaining_balance)}</td>
+                  <td><StatusBadge status={b.payment_status} /></td>
+                  <td>{b.created_at?.slice(0, 16)}</td>
+                  <td className="btn-group">
+                    <Link to={`/bills/${b.id}`} className="btn btn-blue btn-sm">View</Link>
+                    <Link to={`/edit-bill/${b.id}`} className="btn btn-orange btn-sm">Edit</Link>
+                    <button className="btn btn-purple btn-sm"
+                      onClick={() => openThermal(b.id)}>80mm</button>
+                    <button className="btn btn-wa btn-sm"
+                      onClick={() => shareBillWA(b.id)} title="Share on WhatsApp">WA Biz</button>
+                    <button className="btn btn-red btn-sm" onClick={() => del(b.id, b.sr_no)}>Del</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showPrintSel && (
+        <PrintSelector onClose={() => setShowPrintSel(false)} toast={toast} />
+      )}
+      {thermalBill && (
+        <ThermalPrint bill={thermalBill} onClose={() => setThermalBill(null)} />
+      )}
+    </div>
+  )
+}
