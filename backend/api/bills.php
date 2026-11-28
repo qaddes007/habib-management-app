@@ -280,7 +280,7 @@ try {
                         $area = ($sheetAreaMap[$sheetSize] ?? $customSize) * $pcs;
                         $total = $bendTotal + $extra;
                     } elseif ($cat === 'bending_sheet') {
-                        $area = $w * $l * $pcs;
+                        $area = 0;
                         $total = $bendTotal + $extra;
                     } else {
                         $area = $w * $l * $pcs;
@@ -443,7 +443,7 @@ function normalizeSheetMaterial(string $mat): ?string {
 
 function normalizeGaugeValue(?string $value): string {
     $value = trim((string)($value ?? ''));
-    if ($value === '' || $value === '0' || $value === '1') return '12 Gauge';
+    if ($value === '' || $value === '0') return '12 Gauge';
     $value = preg_replace('/\s+/', ' ', $value);
     $clean = preg_replace('/\s*Gauge\s*$/i', '', $value);
     $clean = trim((string)$clean);

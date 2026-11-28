@@ -9,7 +9,7 @@ let nextId = 1
 
 function normalizeGaugeString(value) {
   const raw = String(value ?? '').trim()
-  if (!raw || raw === '0' || raw === '1') return '12 Gauge'
+  if (!raw || raw === '0') return '12 Gauge'
   const compact = raw.replace(/\s+/g, ' ').replace(/\s*Gauge\s*$/i, '').trim()
   if (!compact || compact === '0') return '12 Gauge'
   return /^\d+(?:\.\d+)?$/i.test(compact) ? `${compact} Gauge` : raw.trim()

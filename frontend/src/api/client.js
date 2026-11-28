@@ -409,7 +409,7 @@ function calculatePendingBill(operation, existingBill = null) {
       ? (Number(frame.width) || 0)
       : frame.bill_category === 'bending_only'
         ? pendingSheetArea * pcs
-        : ['sheet_sale', 'only_cutting'].includes(frame.bill_category) ? 0 : width * length * pcs;
+        : ['bending_sheet', 'sheet_sale', 'only_cutting'].includes(frame.bill_category) ? 0 : width * length * pcs;
     let total = frame.bill_category === 'fancy'
       ? ((Number(frame.width) > 0 || Number(frame.rate) > 0)
         ? area * (Number(frame.rate) || 0)
