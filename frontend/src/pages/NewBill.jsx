@@ -120,19 +120,31 @@ function isPresetGauge(value, list) {
 function GaugeSelect({ value, list, onChange }) {
   const safeValue = normalizeGaugeString(value)
   const preset = isPresetGauge(safeValue, list)
-  const selectVal = preset ? (safeValue || (list[0] + ' Gauge')) : '+ Write Own'
+  const [writeOwn, setWriteOwn] = useState(!preset)
+
+  useEffect(() => {
+    const raw = String(value ?? '').trim()
+    if (raw) setWriteOwn(!isPresetGauge(normalizeGaugeString(raw), list))
+  }, [value, list])
+
+  const selectVal = writeOwn ? '+ Write Own' : (safeValue || (list[0] + ' Gauge'))
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <select value={selectVal} onChange={e => {
-        if (e.target.value === '+ Write Own') onChange('')
-        else onChange(normalizeGaugeString(e.target.value))
+        if (e.target.value === '+ Write Own') {
+          setWriteOwn(true)
+          onChange('')
+        } else {
+          setWriteOwn(false)
+          onChange(normalizeGaugeString(e.target.value))
+        }
       }}>
         {list.map(g => (
           <option key={g} value={g + ' Gauge'}>{g} Gauge</option>
         ))}
         <option value="+ Write Own">+ Write Own</option>
       </select>
-      {!preset && (
+      {writeOwn && (
         <input
           value={value || ''}
           onChange={e => onChange(normalizeGaugeString(e.target.value))}
