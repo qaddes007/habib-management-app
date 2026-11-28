@@ -23,7 +23,7 @@ export default function ThermalPrint({ bill, onClose }) {
   const frames = bill.frames || []
   const company = bill.company || {}
   const billBend = frames.reduce(
-    (s, f) => ['bending_sheet', 'bending_only'].includes(f.bill_category)
+    (s, f) => f.bill_category === 'bending_sheet'
       ? s + (parseFloat(f.bend_rate) || 0) * (parseFloat(f.bend_count) || 0)
       : s,
     0
@@ -307,7 +307,7 @@ export default function ThermalPrint({ bill, onClose }) {
                         {sizeStr}
                       </td>
                       <td style={{ fontSize: 9, textAlign: 'center', padding: '4px 1px', verticalAlign: 'top', borderBottom: '1px dotted #bbb' }}>
-                        {isOnlyCutting || isSheetSale || isBending ? '—' : Number(f.area || (isFancy ? f.width : 0) || 0).toFixed(2)}
+                        {isOnlyCutting || isSheetSale || isBending || isBendOnly ? '—' : Number(f.area || (isFancy ? f.width : 0) || 0).toFixed(2)}
                       </td>
                       <td style={{ fontSize: 9, textAlign: 'center', padding: '4px 1px', verticalAlign: 'top', borderBottom: '1px dotted #bbb' }}>
                         {isBendOnly ? `${money(f.bend_rate || 0)}/kg` : isBending ? `${money(f.bend_rate || 0)}/bend` : isFancy ? `${money(f.rate || 0)}/sf` : isSheetSale ? `${money(f.direct_price || 0)}/sheet` : isOnlyCutting ? '—' : money(f.rate || f.direct_price || 0)}

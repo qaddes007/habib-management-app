@@ -1602,7 +1602,7 @@ export async function shareBillAsImage(bill, filename = `habib-bill-${bill?.sr_n
       }
       if (tags.length) labels.push(tags.join(', '))
       if (isOnlyCutting) labels.push(`Qty: ${Number(frame.pcs) || 1}`)
-      const area = isOnlyCutting || isSheetSale || isBending
+      const area = isOnlyCutting || isSheetSale || isBending || isBendOnly
         ? '—'
         : Number(frame.area || (isFancy ? frame.width : 0) || 0).toFixed(2)
       const rate = isBendOnly
@@ -1628,7 +1628,9 @@ export async function shareBillAsImage(bill, filename = `habib-bill-${bill?.sr_n
     })
   }
 
-  const bendTotal = frames.reduce((sum, frame) => sum + (Number(frame.bend_rate) || 0) * (Number(frame.bend_count) || 0), 0)
+  const bendTotal = frames.reduce((sum, frame) => frame.bill_category === 'bending_sheet'
+    ? sum + (Number(frame.bend_rate) || 0) * (Number(frame.bend_count) || 0)
+    : sum, 0)
   if (bendTotal > 0) addPair('Bending Total', money(bendTotal))
   addDivider()
   addPair('Grand Total', money(bill.grand_total), { font: 'bold 12px Arial, sans-serif' })

@@ -996,7 +996,7 @@ export default function NewBill({ toast }) {
         <div className="gt-item"><div className="gt-label">Weight</div><div className="gt-value" style={{ color: '#7c3aed' }}>{totalWeight.toFixed(2)} Kg</div></div>
         {(() => {
           const bendSum = frames.reduce((s, f) => {
-            if (!['bending_sheet', 'bending_only'].includes(f.bill_category)) return s
+            if (f.bill_category !== 'bending_sheet') return s
             const br = parseFloat(f.bend_rate) || 0
             const bc = parseFloat(f.bend_count) || 0
             return s + br * bc
